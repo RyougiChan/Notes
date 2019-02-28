@@ -23,7 +23,7 @@ npm install --save-dev webpack
 npm init
 ```
 
-####  安装 webpack
+#### 安装 webpack
 
 ```powershell
 npm install --save-dev webpack
@@ -31,7 +31,7 @@ npm install --save-dev webpack
 
 ---
 
-**ERR 记录**
+**ERR 记录**:
 
 ```powershell
 npm ERR! code Z_BUF_ERROR
@@ -105,7 +105,7 @@ node_modules/.bin/webpack app/main.js public/bundle.js
 
 ---
 
-**ERR 记录**
+**ERR 记录**:
 
 ```powershell
 One CLI for webpack must be installed. These are recommended choices, delivered as separate packages:
@@ -225,7 +225,7 @@ npm run build
 
 ### Source Maps
 
-**！最好仅在开发阶段使用**
+**最好仅在开发阶段使用**:
 
 > 提供了一种对应编译文件和源文件的方法，使得编译后的代码**可读性更高**，也更容易**调试**。
 
@@ -284,7 +284,7 @@ module.exports = {
     historyApiFallback: true, //不跳转
     inline: true //实时刷新
     // 其他参数 https://webpack.js.org/configuration/dev-server/
-  } 
+  }
 }
 ```
 
@@ -314,7 +314,7 @@ module.exports = {
 
 #### Babel 编译 JavaScript 的平台
 
-> 1. 让你能使用最新的 JavaScript 代码（ES6，ES7...），而不用管新标准是否被当前使用的浏览器完全支持；
+1. 让你能使用最新的 JavaScript 代码（ES6，ES7...），而不用管新标准是否被当前使用的浏览器完全支持；
 2. 让你能使用基于 JavaScript 进行了拓展的语言，比如 React 的 JSX；
 
 - 安装依赖
@@ -363,12 +363,12 @@ npm install --save-dev babel-core babel-loader babel-preset-env babel-preset-rea
   // 安装 React 依赖
   npm install --save react react-dom
   ```
-    
+
   ```js
   //Greeter.js
     import React, {Component} from 'react'
     import config from './config.json';
-    
+
     class Greeter extends Component{
       render() {
         return (
@@ -378,7 +378,7 @@ npm install --save-dev babel-core babel-loader babel-preset-env babel-preset-rea
         );
       }
     }
-    
+
     export default Greeter
   ```
   
@@ -395,7 +395,7 @@ npm install --save-dev babel-core babel-loader babel-preset-env babel-preset-rea
   
 ---
 
-**ERR 记录**
+**ERR 记录**:
 
 ```powershell
 ERROR in ./app/main.js
@@ -441,8 +441,9 @@ Babel 可以完全在 `webpack.config.js` 中进行配置，但是考虑到 babe
 ---
 
 ##### CSS: `css-loader` 和 `style-loader`
-  - `css-loader` 使你能够使用类似 `@import` 和 `url(...)` 的方法实现 `require()` 的功能
-  - `style-loader` 将所有的计算后的样式加入页面中。二者组合在一起使你能够把样式表嵌入 webpack 打包后的 JS 文件中。
+
+- `css-loader` 使你能够使用类似 `@import` 和 `url(...)` 的方法实现 `require()` 的功能
+- `style-loader` 将所有的计算后的样式加入页面中。二者组合在一起使你能够把样式表嵌入 webpack 打包后的 JS 文件中。
 
 ```powershell
 // 安装
@@ -523,9 +524,9 @@ render(<Greeter />, document.getElementById('root'));
 
 在 webpack 中配置启用
 
-```json
+```js
 // webpack.config.json
-...
+// ...
                 use: [
                     {
                         loader: "style-loader"
@@ -582,11 +583,13 @@ export default Greeter
 ```powershell
 npm install --save-dev less less-loader
 ```
+
 - Sass Loader 处理 `.scss` 文件
 
 ```powershell
 npm install --save-dev node-sass sass-loader
 ```
+
 - Stylus Loader 处理 `.styl` 文件
 
 ```powershell
@@ -1004,7 +1007,7 @@ module.exports = {
 Error: Chunk.entrypoints: Use Chunks.groupsIterable and filter by instanceof Entrypoint instead
 ```
 
-> [extract-text-webpack-plugin](https://github.com/webpack-contrib/extract-text-webpack-plugin#Usage): Since webpack v4 the extract-text-webpack-plugin should not be used for css. Use [mini-css-extract-plugin](https://github.com/webpack-contrib/mini-css-extract-plugin) instead. 
+> [extract-text-webpack-plugin](https://github.com/webpack-contrib/extract-text-webpack-plugin#Usage): Since webpack v4 the extract-text-webpack-plugin should not be used for css. Use [mini-css-extract-plugin](https://github.com/webpack-contrib/mini-css-extract-plugin) instead.
 
 ```powershell
 npm install --save-dev mini-css-extract-plugin

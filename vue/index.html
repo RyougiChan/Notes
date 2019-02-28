@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Vue</title>
+</head>
+
+<body>
+    <span id='v-text' v-text="msg"></span>
+    <!-- 和下面的一样 -->
+    <!-- <span>{{msg}}</span> -->
+
+    <div id="v-html" v-html="html"></div>
+
+    <h1 id="v-show" v-show="ok">Hello!</h1>
+
+    <div id="v-if-else">
+        <div v-if="type === 'A'">
+            A
+        </div>
+        <div v-else-if="type === 'B'">
+            B
+        </div>
+        <div v-else-if="type === 'C'">
+            C
+        </div>
+        <div v-else>
+            Not A/B/C
+        </div>
+    </div>
+    <div id="v-on">
+        <!-- <button id="v-on" v-on:click="doThis">点我</button> -->
+        <button id="v-on" @click.once="doThis">点我</button>
+        <button v-on:click="say('hi')">Say hi</button>
+        <button v-on:click="warn('Form cannot be submitted yet.', $event)">
+            Submit
+        </button>
+    </div>
+
+    <div id="v-bind">
+        <div class="static" v-bind:class="[activeClass, errorClass]">F12 to View</div>
+        <div class="static" v-bind:class=" { active: isActive, 'text-danger': hasError } ">F12 to View</div>
+        <div class="static" :class="dynamicClass">F12 to View</div>
+        <div class="static" :class="computedClass">F12 to View</div>
+        <div class="static" v-bind:class="[{ active: isActive }, errorClass, dynamicClass]">F12 to View</div>
+    </div>
+
+    <div id="v-model">
+        <input v-model="message" placeholder="edit me">
+        <p>Message is: {{ message }}</p>
+
+        <input type="checkbox" id="checkbox" v-model="checked">
+        <label for="checkbox">{{ checked }}</label>
+
+        <div id="checkboxs">
+            <input type="checkbox" id="jack" value="Jack" v-model="checkedNames">
+            <label for="jack">Jack</label>
+            <input type="checkbox" id="john" value="John" v-model="checkedNames">
+            <label for="john">John</label>
+            <input type="checkbox" id="mike" value="Mike" v-model="checkedNames">
+            <label for="mike">Mike</label>
+            <br>
+            <span>Checked names: {{ checkedNames }}</span>
+        </div>
+
+        <div id="radios">
+            <input type="radio" id="one" value="One" v-model="picked">
+            <label for="one">One</label>
+            <br>
+            <input type="radio" id="two" value="Two" v-model="picked">
+            <label for="two">Two</label>
+            <br>
+            <span>Picked: {{ picked }}</span>
+        </div>
+
+        <div id="selects">
+            <select v-model="selected">
+                <option disabled selected>select a value</option>
+                <option value="1">A</option>
+                <option value="2">B</option>
+                <option value="3">C</option>
+            </select>
+            <p>selected: {{ selected }}</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <script>
+        let vm_v_model = new Vue({
+            el: '#v-model',
+            data() {
+                return {
+                    message: '',
+                    checked: false,
+                    checkedNames: [],
+                    picked: '',
+                    selected: null
+                }
+            }
+        });
+        let vm_v_bind = new Vue({
+            el: '#v-bind',
+            data() {
+                return {
+                    activeClass: 'active',
+                    errorClass: 'text-danger',
+                    isActive: true,
+                    hasError: false,
+                    dynamicClass: {
+                        'dynamicClass-1': true,
+                        'dynamicClass-2': false
+                    }
+                }
+            },
+            computed: {
+                computedClass() {
+                    return {
+                        'computedClass-1': true,
+                        'computedClass-2': false
+                    }
+                }
+            }
+        });
+
+        let vm_v_on = new Vue({
+            el: '#v-on',
+            methods: {
+                doThis(evt) {
+                    alert('awsl');
+                    console.log(evt.target);
+                },
+                say(msg) {
+                    alert(msg);
+                },
+                warn(msg, evt) {
+                    alert(msg);
+                    console.log(evt.target);
+                }
+            }
+        });
+
+        let vm_v_if_else = new Vue({
+            el: '#v-if-else',
+            data() {
+                return {
+                    type: 'A'
+                }
+            }
+        });
+        setTimeout(() => vm_v_if_else.type = 'B', 1000);
+        setTimeout(() => vm_v_if_else.type = 'C', 2000);
+        setTimeout(() => vm_v_if_else.type = '', 3000);
+
+        let vm_v_show = new Vue({
+            el: '#v-show',
+            data() {
+                return {
+                    ok: true
+                }
+            }
+        });
+
+        setTimeout(() => vm_v_show.ok = false, 2000);
+
+        let vm_v_html = new Vue({
+            el: '#v-html',
+            data() {
+                return {
+                    html: '<font color="red" size="48">v-html test</font>'
+                }
+            }
+        });
+
+        let vm_v_text = new Vue({
+            el: '#v-text',
+            data() {
+                return {
+                    msg: 'v-text test'
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
