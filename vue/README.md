@@ -230,5 +230,78 @@ $ npm install --save-dev vue-cli
     <p>Message is: {{ message }}</p>
   ```
 
-**Notice**: `v-model` 会忽略所有表单元素的 `value`、`checked`、`selected` 特性的初始值而总是将 Vue 实例的数据作为数据来源。你应该通过 JavaScript 在组件的 `data` 选项中声明初始值。
+  **Notice**: `v-model` 会忽略所有表单元素的 `value`、`checked`、`selected` 特性的初始值而总是将 Vue 实例的数据作为数据来源。你应该通过 JavaScript 在组件的 `data` 选项中声明初始值。
 
+  - [`v-slot`](https://github.com/vuejs/rfcs/blob/master/active-rfcs/0001-new-slot-syntax.md) (2.6.0+) 缩写：`#`，提供具名插槽或需要接收 `prop` 的插槽。
+    限用于
+    - `<template>`
+    - 组件 (对于一个单独的带 `prop` 的默认插槽)
+
+  ```html
+  <!-- 具名插槽 -->
+  <foo>
+    <template v-slot:header>
+      <div class="header"></div>
+    </template>
+
+    <template v-slot:body>
+      <div class="body"></div>
+    </template>
+
+    <template v-slot:footer>
+      <div class="footer"></div>
+    </template>
+  </foo>
+
+  <!-- 接收 prop 的具名插槽 -->
+  <infinite-scroll>
+    <template v-slot:item="slotProps">
+      <div class="item">
+        {{ slotProps.item.text }}
+      </div>
+    </template>
+  </infinite-scroll>
+
+  <!-- 接收 prop 的默认插槽，使用了解构 -->
+  <mouse-position v-slot="{ x, y }">
+    Mouse position: {{ x }}, {{ y }}
+  </mouse-position>
+  ```
+
+  - `v-pre` 跳过这个元素和它的子元素的编译过程。可以用来显示原始 `Mustache` 标签。跳过大量没有指令的节点会加快编译。
+
+  ```html
+  <span v-pre>{{ this will not be compiled }}</span>
+  ```
+
+  - `v-cloak` 这个指令保持在元素上直到关联实例结束编译。和 CSS 规则如 `[v-cloak] { display: none }` 一起用时，这个指令可以隐藏未编译的 `Mustache` 标签直到实例准备完毕。
+
+  ```html
+  <div v-cloak>
+    {{ message }}
+  </div>
+  ```
+
+  ```css
+  [v-cloak] {
+    display: none;
+  }
+  ```
+
+  - `v-once` 只渲染元素和组件一次。随后的重新渲染，元素/组件及其所有的子节点将被视为静态内容并跳过。
+
+  ```html
+  <!-- 单个元素 -->
+  <span v-once>This will never change: {{msg}}</span>
+  <!-- 有子元素 -->
+  <div v-once>
+    <h1>comment</h1>
+    <p>{{msg}}</p>
+  </div>
+  <!-- 组件 -->
+  <my-component v-once :comment="msg"></my-component>
+  <!-- `v-for` 指令-->
+  <ul>
+    <li v-for="i in list" v-once>{{i}}</li>
+  </ul>
+  ```
