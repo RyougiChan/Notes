@@ -6,9 +6,14 @@
 	Properties {
 		// 声明格式 `name ("display name",type)=default value`
 		// 颜色
-		_Color ("_Color",Color) = (1,1,1,1)
+		_Colour ("_Colour",Color) = (1,1,1,1)
 		// 纹理贴图
 		_MainTexture ("Mian Texture",2D) = "white"{}
+		// 使用我们的噪音纹理，并实现一种“溶解”或“剪切”效果
+		_DissolveTexture ("Dissolve Texture", 2D) = "white" {}
+		_DissolveCutoff ("Dissolve Cutoff", Range(0, 1)) = 1
+
+		_ExtrudeAmount ("Extrue Amount", float) = 0
 	}
 
 	// 每一个Shader有一个或者多个SubShader
@@ -32,6 +37,8 @@
 					// 从Unity中获取顶点坐标和UV纹理坐标
 					float4 vertex:POSITION;
 					float2 uv:TEXCOORD0;
+					// 法线
+					float3 normal : NORMAL;
 				};
 
 				// 最后配置顶点函数，创建一个结构体，并将其命名v2f(代表从vertex to fragment，顶点数据传递到片元)
@@ -43,12 +50,20 @@
 					float2 uv:TEXCOORD0;
 				};
 
-				float4 _Color;
+				float4 _Colour;
 				sampler2D _MainTexture;
+				sampler2D _DissolveTexture;
+				float _DissolveCutoff;
+				float _ExtrudeAmount;
+
 				// 当传递一个参数到vertexFunction中时，Unity将解析这个函数的结构，并基于正在绘制的对象模型传递值。
 				// 将vertex中包含的数据传递到片元函数，同时确保vertexFunction 返回 v2f的数据类型
 				v2f vertexFunction(a2v v){
 					v2f o;
+					// 在我们将顶点转换出局部模型空间之前，
+					// 我们将通过将它们的法线方向加到_ExtrudeAmount来向外偏移一定量
+					// _Time是UnityCG.cginc中包含的变量，表示时间，y值表示秒
+					v.vertex.xyz += v.normal.xyz * _ExtrudeAmount * sin(_Time.y);
 					o.position = UnityObjectToClipPos(v.vertex);
 					o.uv = v.uv;
 					return o;
@@ -57,8 +72,15 @@
 				// fixed4: 输出的片元函数将是一个有（R,G,B,A)代表的颜色值
 				// 我们将为片元函数添加一个SV_TARGET的输出语义,这个过程告诉Unity我们将输出一个color去渲染
 				fixed4 fragmentFunction(v2f i):SV_TARGET{
-					return tex2D(_MainTexture, i.uv);
-					//return _Color;
+					float4 textureColour = tex2D(_MainTexture, i.uv);
+					// 对溶解纹理进行采样
+					float4 dissolveColour = tex2D(_DissolveTexture, i.uv);
+					// clip函数通过检查给定的值是否小于0来工作。
+					// 如果是，则我们丢弃像素并且不绘制任何内容。
+					// 如果不是，我们保留像素并继续。
+					clip(dissolveColour.rgb - _DissolveCutoff);
+					return textureColour * _Colour;;
+					//return _Colour;
 				}
 			ENDCG
 		}
