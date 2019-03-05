@@ -305,3 +305,221 @@ $ npm install --save-dev vue-cli
     <li v-for="i in list" v-once>{{i}}</li>
   </ul>
   ```
+
+### vue 自定义组件
+
+> 组件声明格式：组件名大小写使用 `kebab-case` 或 `PascalCase`。每个组件必须只有一个根元素，否则 Vue 会显示错误 `every component must have a single root element`
+
+```js
+// 全局注册
+Vue.component('ComponentName',{
+  data: function() {
+    return {
+      name: 'yuko',
+    };
+  },
+  props:['p1','p2'],
+  template: '<li>{{ name }} {{ p1 }}</li>'
+});
+
+// 局部注册
+var ComponentA = { /* ... */ }
+var ComponentB = { /* ... */ }
+
+new Vue({
+  el: '#app',
+  components: {
+    'component-a': ComponentA,
+    'component-b': ComponentB
+  }
+});
+```
+
+注意：
+
+- `data` 必须是一个函数，以实现每个实例可以维护一份被返回对象的独立的拷贝
+- 局部注册的组件在其子组件中[不可用](https://cn.vuejs.org/v2/guide/components-registration.html#%E5%B1%80%E9%83%A8%E6%B3%A8%E5%86%8C)
+
+> Prop
+
+- 当你使用 DOM 中的模板时，`camelCase` (驼峰命名法) 的 `prop` 名需要使用其等价的 `kebab-case` (短横线分隔命名) 命名。(使用字符串模板，不存在此限制)
+- 为了定制 `prop` 的验证方式，你可以为 `props` 中的值提供一个带有验证需求的对象，而不是一个字符串数组
+
+```js
+// 数组形式
+props: ['title', 'likes', 'isPublished', 'commentIds', 'author']
+
+// 对象形式
+// Prop 验证
+props: {
+    // 基础的类型检查 (`null` 和 `undefined` 会通过任何类型验证)
+    propA: Number,
+    // 多个可能的类型
+    propB: [String, Number],
+    // 必填的字符串
+    propC: {
+      type: String,
+      required: true
+    },
+    // 带有默认值的数字
+    propD: {
+      type: Number,
+      default: 100
+    },
+    // 带有默认值的对象
+    propE: {
+      type: Object,
+      // 对象或数组默认值必须从一个工厂函数获取
+      default: function () {
+        return { message: 'hello' }
+      }
+    },
+    // 自定义验证函数
+    propF: {
+      validator: function (value) {
+        // 这个值必须匹配下列字符串中的一个
+        return ['success', 'warning', 'danger'].indexOf(value) !== -1
+      }
+    }
+  }
+```
+
+- 传递静态或动态 Prop
+
+传递 Prop 的值类型可以是任何类型的值，如 `String`, `Number`, `Boolean`, `Array`. `Object` 等
+
+```html
+<!-- 静态赋值 -->
+<blog-post title="My journey with Vue"></blog-post>
+
+<!-- 动态赋予一个变量的值 -->
+<blog-post v-bind:title="post.title"></blog-post>
+
+<!-- 动态赋予一个复杂表达式的值 -->
+<blog-post
+  v-bind:title="post.title + ' by ' + post.author.name"
+></blog-post>
+```
+
+当需要使用对象的多个属性时，单独传参显得比较复杂时可以重构如下：
+
+```html
+<!-- 需要使用对象的多个属性 -->
+<blog-post
+  v-for="post in posts"
+  v-bind:key="post.id"
+  v-bind:title="post.title"
+  v-bind:content="post.content"
+  v-bind:publishedAt="post.publishedAt"
+  v-bind:comments="post.comments"
+></blog-post>
+
+<!-- 接受一个单独的 post prop -->
+<blog-post
+  v-for="post in posts"
+  v-bind:key="post.id"
+  v-bind:post="post"
+></blog-post>
+```
+
+```js
+// 需要使用对象的多个属性
+Vue.component('blog-post', {
+  props: ['title', 'content'],
+  template: `
+    <div class="blog-post">
+      <h3>{{ title }}</h3>
+      <div v-html="content"></div>
+    </div>
+  `
+})
+
+// 接受一个单独的 post prop
+Vue.component('blog-post', {
+  props: ['post'],
+  template: `
+    <div class="blog-post">
+      <h3>{{ post.title }}</h3>
+      <div v-html="post.content"></div>
+    </div>
+  `
+})
+```
+
+- 单向数据流
+所有的 prop 都使得其父子 prop 之间形成了一个单向下行绑定：父级 prop 的更新会向下流动到子组件中，但是反过来则不行。每次父级组件发生更新时，子组件中所有的 prop 都将会刷新为最新的值。这意味着 **不应该** 在一个子组件内部改变 prop。以下是两种常见的试图改变一个 prop 的情形：
+  - 这个 prop 用来传递一个初始值；这个子组件接下来希望将其作为一个本地的 prop 数据来使用。
+
+  ```js
+  // 最好定义一个本地的 data 属性并将这个 prop 用作其初始值
+  props: ['initialCounter'],
+  data: function () {
+    return {
+      counter: this.initialCounter
+    }
+  }
+  ```
+
+  - 这个 prop 以一种原始的值传入且需要进行转换。
+
+  ```js
+  // 最好使用这个 prop 的值来定义一个计算属性
+  props: ['size'],
+  computed: {
+    normalizedSize: function () {
+      return this.size.trim().toLowerCase()
+    }
+  }
+  ```
+
+- 监听子组件事件
+
+```html
+<blog-post
+  ...
+  v-on:enlarge-text="postFontSize += 0.1"
+></blog-post>
+
+<button v-on:click="$emit('enlarge-text')">
+  Enlarge text
+</button>
+
+<!-- 使用事件抛出一个值 -->
+<button v-on:click="$emit('enlarge-text', 0.1)">
+  Enlarge text
+</button>
+
+<blog-post
+  ...
+  v-on:enlarge-text="postFontSize += $event"
+></blog-post>
+<!-- OR -->
+<blog-post
+  ...
+  v-on:enlarge-text="onEnlargeText"
+></blog-post>
+
+<!-- 在组件上使用 v-model -->
+<custom-input v-model="searchText"></custom-input>
+```
+
+```js
+// 使用事件抛出一个值
+...
+methods: {
+  onEnlargeText: function (enlargeAmount) {
+    this.postFontSize += enlargeAmount
+  }
+}
+
+// 在组件上使用 v-model
+Vue.component('custom-input', {
+  props: ['value'],
+  template: `
+    <input
+      v-bind:value="value"
+      v-on:input="$emit('input', $event.target.value)"
+    >
+  `
+})
+```
