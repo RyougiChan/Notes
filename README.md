@@ -28,3 +28,13 @@
 - [Vue API](https://cn.vuejs.org/v2/api/)
 
 ### Vue 笔记
+
+## Unity
+
+### Unity 资料
+
+#### Unity Shader
+
+- [Unity-Shader-Basics-Tutorial](https://github.com/Centribo/Unity-Shader-Basics-Tutorial)
+- [Writing Shaders](https://docs.unity3d.com/Manual/ShadersOverview.html)
+- [Shaders: ShaderLab and fixed function shaders](https://docs.unity3d.com/Manual/ShaderTut1.html)

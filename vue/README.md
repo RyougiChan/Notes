@@ -472,7 +472,7 @@ Vue.component('blog-post', {
   }
   ```
 
-- 监听子组件事件
+> 监听子组件事件
 
 ```html
 <blog-post
@@ -521,5 +521,32 @@ Vue.component('custom-input', {
       v-on:input="$emit('input', $event.target.value)"
     >
   `
+})
+```
+
+> 动态组件|异步组件
+
+- 在动态组件上使用 `<keep-alive>`
+`<keep-alive>` 要求被切换到的组件都有自己的名字，不论是通过组件的 name 选项还是局部/全局注册。
+
+```html
+<!-- 根据 is 每次切换时 Vue 都创建了一个新的 currentTabComponent 实例 -->
+<component v-bind:is="currentTabComponent"></component>
+
+<!-- 失活的组件将会被缓存！-->
+<keep-alive>
+  <component v-bind:is="currentTabComponent"></component>
+</keep-alive>
+```
+
+- [异步组件](https://cn.vuejs.org/v2/guide/components-dynamic-async.html#%E5%BC%82%E6%AD%A5%E7%BB%84%E4%BB%B6)
+Vue 允许以一个工厂函数的方式定义组件，这个工厂函数会异步解析组件定义。Vue 只有在这个组件需要被渲染的时候才会触发该工厂函数，且会把结果缓存起来供未来重渲染。
+
+```js
+Vue.component('async-example', function (resolve, reject) {
+    // 向 `resolve` 回调传递组件定义
+    resolve({
+      template: '<div>I am async!</div>'
+    })
 })
 ```
