@@ -38,3 +38,4 @@
 - [Unity-Shader-Basics-Tutorial](https://github.com/Centribo/Unity-Shader-Basics-Tutorial)
 - [Writing Shaders](https://docs.unity3d.com/Manual/ShadersOverview.html)
 - [Shaders: ShaderLab and fixed function shaders](https://docs.unity3d.com/Manual/ShaderTut1.html)
+- [Writing vertex and fragment shaders](https://docs.unity3d.com/Manual/SL-ShaderPrograms.html)

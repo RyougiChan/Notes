@@ -2,7 +2,7 @@
 
 ## [Shaders: ShaderLab 和 固定渲染管线 shaders](https://docs.unity3d.com/Manual/ShaderTut1.html)
 
-### 入门
+### Shader 入门其之一
 
 - 创建新 shader：
 主菜单依次选择 `Assets > Create > Shader > Unlit Shader`。
@@ -93,9 +93,11 @@ Shader "VertexLit" {
 }
 ```
 
-## [Shaders: 顶点和片段程序](https://docs.unity3d.com/Manual/ShaderTut2.html)
+## [Shaders: 顶点和片元编程](https://docs.unity3d.com/Manual/ShaderTut2.html)
 
-当使用顶点和片段程序（所谓的“可编程管线”）时，图形硬件中的大多数硬编码功能（“固定渲染管线”）都将被关闭。例如，使用顶点程序会完全关闭标准 3D 变换、光照和纹理坐标生成。编写顶点/片段程序需要全面了解 3D 变换、光照和坐标空间 - 因为必须自己重写内置于 OpenGL 等 API 的固定渲染。
+### Shader 入门其之二
+
+当使用顶点和片元程序（所谓的“可编程管线”）时，图形硬件中的大多数硬编码功能（“固定渲染管线”）都将被关闭。例如，使用顶点程序会完全关闭标准 3D 变换、光照和纹理坐标生成。编写顶点/片元程序需要全面了解 3D 变换、光照和坐标空间 - 因为必须自己重写内置于 OpenGL 等 API 的固定渲染。
 
 以下示例演示了一个完整的 Shader，它将对象法线呈现为指定颜色：
 
@@ -122,16 +124,16 @@ Shader "Tutorial/Display Normals" {
             CGPROGRAM
             // 告诉代码包含给定函数中的顶点程序（此处为 vert）
             #pragma vertex vert
-            // 告诉代码包含给定函数中的片段程序（这里是 frag）
+            // 告诉代码包含给定函数中的片元程序（这里是 frag）
             #pragma fragment frag
             // UnityCG.cginc 文件包含常用的声明和函数
             #include "UnityCG.cginc"
 
-            // 定义“顶点到片段”结构，命名为 v2f，包含从顶点传递给片段程序的信息
+            // 定义“顶点到片元”结构，命名为 v2f，包含从顶点传递给片元程序的信息
             struct v2f {
                 // 传递位置和颜色参数。
                 float4 pos : SV_POSITION;
-                // 颜色将在顶点程序中计算，并在片段程序中输出。
+                // 颜色将在顶点程序中计算，并在片元程序中输出。
                 fixed3 color : COLOR0;
             };
 
@@ -152,7 +154,7 @@ Shader "Tutorial/Display Normals" {
                 return o;
             }
 
-            // 定义一个片段程序 - frag 函数
+            // 定义一个片元程序 - frag 函数
             fixed4 frag (v2f i) : SV_Target
             {
                 return fixed4 (i.color, 1);
@@ -164,4 +166,70 @@ Shader "Tutorial/Display Normals" {
 }
 ```
 
-[Accessing shader properties in Cg/HLSL](https://docs.unity3d.com/Manual/SL-ShaderPrograms.html)
+### [编写顶点和片元着色器](https://docs.unity3d.com/Manual/SL-ShaderPrograms.html)
+
+着色器程序是用 [HLSL(High-Level Shading Language)](https://docs.unity3d.com/Manual/SL-ShadingLanguage.html) 语言编写的，方法是在 Pass 命令中的某处着色器文本中嵌入“片段”
+
+#### HLSL 片段
+
+HLSL 程序片段是在 `CGPROGRAM` 和 `ENDCG`关键字之间编写的，或者在 `HLSLPROGRAM` 和 `ENDHLSL` 之间。后一种形式不会自动包含 `HLSLSupport` 和 `UnityShaderVariables` [内置头文件](https://docs.unity3d.com/Manual/SL-BuiltinIncludes.html)。每个片段必须至少包含一个顶点程序和一个片段程序。因此需要 `#pragma vertex` 和 `#pragma fragment` 指令。
+
+- **内置着色器包含文件**
+
+  Unity中的着色器包含文件扩展名为 `.cginc`，内置的文件为：
+  - `HLSLSupport.cginc` （自动包含）跨平台着色器的编译提供程序宏与定义
+  - `UnityShaderVariables.cginc ` （自动包含）常用的全局变量
+  - `UnityCG.cginc` 常用的辅助函数，通常包含在 Unity 着色器中
+  UnityCG.cginc 中的数据结构
+    - `appdata_base` 顶点着色器(vertex shader)输入位置，法线，一个纹理坐标
+    - `appdata_tan` 顶点着色器(vertex shader)输入位置，法线，切线，一个纹理坐标
+    - `appdata_full` 顶点着色器输入位置，法线，切线，顶点颜色和两个纹理坐标
+    - `appdata_img` 顶点着色器输入位置和一个纹理坐标
+  - `AutoLight.cginc` 照明和阴影功能，表面着色器在内部使用此文件
+  - `Lighting.cginc` 标准表面着色器照明模型，编写表面着色器时自动包含
+  - `TerrainEngine.cginc` 地形(Terrain)和植被着色器辅助函数
+
+```csharp
+CGPROGRAM
+// 用法 #include ...
+#include "UnityCG.cginc"
+ENDCG
+```
+
+- 编译指令：`#pragma` 语句
+
+  指示哪个着色器函数要编译
+  - `#pragma vertex name` - 将函数 `name` 编译为顶点着色器
+  - `#pragma fragment name` - 将函数 `name` 编译为片元着色器
+  - `#pragma geometry name` - 将函数 `name` 编译为 DX10 几何着色器。拥有此选项会自动打开 `#pragma target 4.0`
+  - `#pragma hull name` - 将函数 `name` 编译为 DX11 外壳着色器。拥有此选项会自动打开 `#pragma target 5.0`
+  - `#pragma domain name` - 将函数 `name` 编译为 DX11 域着色器。拥有此选项会自动打开 `#pragma target 5.0`
+  - `#pragma target name` - 指定[着色器编译目标级别](https://docs.unity3d.com/Manual/SL-ShaderCompileTargets.html)，要允许使用更现代的GPI功能，必须使用更高的着色器编译目标
+  - `#pragma require feature ...` - 精确控制着色器所需的GPU
+  - `#pragma only_renderers space separated names` - 仅为给定的渲染器编译着色器。默认情况下，为所有渲染器编译着色器
+  - `#pragma exclude_renderers space separated names` - 不为给定的渲染器编译着色器。默认情况下，为所有渲染器编译着色器
+  - `#pragma multi_compile ...` - 用于处理多个着色器变体
+  - `#pragma enable_d3d11_debug_symbols` - 为 DirectX 11 编译的着色器生成调试信息，这将允许您通过 Visual Studio 2012（或更高版本）图形调试器调试着色器
+  - `#pragma hardware_tier_variants renderer name` - 对于可以运行所选渲染器的每个硬件层，为每个编译的着色器生成多重着色器硬件变体
+  - `#pragma hlslcc_bytecode_disassembly` - 将反汇编的 HLSLcc 字节码嵌入到已翻译的着色器中
+  - `#pragma disable_fastmath` - 启用精确的 IEEE 754 规则，主要涉及 `NaN` 处理（目前仅影响 Metal 平台）
+  - `#pragma glsl_es2` - 在 GLSL 着色器中设置时，即使着色器目标是 OpenGL ES 3，也会生成 GLSL ES 1.0（OpenGL ES 2.0）
+  - `#pragma editor_sync_compilation` - 强制同步编译（仅影响编辑器）
+
+#### 渲染平台
+
+Unity 支持多种渲染  API（例如 Direct3D 11 和 OpenGL），默认情况下，所有着色器程序都编译到所有支持的渲染器中。可以使用 `#pragma only_renderers` 或 `#pragma exclude_renderers` 指令指示要编译的渲染器。
+
+支持的渲染器名称:
+
+- `d3d11` - Direct3D 11/12
+- `glcore` - OpenGL 3.x/4.x
+- `gles` - OpenGL ES 2.0
+- `gles3` - OpenGL ES 3.x
+- `metal` - iOS/Mac Metal
+- `vulkan` - Vulkan
+- `d3d11_9x` - Direct3D 11 9.x 功能级别，与 WSA 平台上常用的一样
+- `xboxone` - Xbox One
+- `ps4` - PlayStation 4
+- `n3ds` - Nintendo 3DS
+- `wiiu` - Nintendo Wii U
