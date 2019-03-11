@@ -43,9 +43,9 @@ $ npm install --save-dev vue-cli
 
 > 所有的生命周期钩子自动绑定 `this` 上下文到实例中，因此你可以访问数据，对属性和方法进行运算。这意味着你不能使用箭头函数来定义一个生命周期方法 (例如 `created: () => this.fetchTodos()`)。这是因为箭头函数绑定了父上下文，因此 `this` 与你期待的 `Vue` 实例不同，`this.fetchTodos` 的行为未定义。
 
-### 常用指令
+### 指令
 
-- [Vue 常用指令](https://cn.vuejs.org/v2/api/#%E6%8C%87%E4%BB%A4)
+- [Vue 指令](https://cn.vuejs.org/v2/api/#%E6%8C%87%E4%BB%A4)
   - `v-text` 更新元素的 `textContent`
 
   ```html
@@ -550,3 +550,237 @@ Vue.component('async-example', function (resolve, reject) {
     })
 })
 ```
+
+### 实例属性
+
+- `data/vm.$data`
+
+  Vue 实例的数据对象。Vue 将会递归将 `data` 的属性转换为 `getter/setter`，从而让 `data` 的属性能够响应数据变化。对象必须是纯粹的对象 (含有零个或多个的 `key/value` 对)。实例创建之后，可以通过 `vm.$data` 访问原始数据对象。Vue 实例也代理了 `data` 对象上所有的属性，因此访问 `vm.a` 等价于访问 `vm.$data.a`(以 `_` 或 `$` 开头的属性不会被代理)。
+
+- `vm.$props`
+
+  当前组件接收到的 `props` 对象。Vue 实例代理了对其 `props` 对象属性的访问。
+
+- `vm.$el`
+
+  Vue 实例使用的根 DOM 元素
+
+- `vm.$options`
+
+  用于当前 Vue 实例的初始化选项，一般在选项中包含自定义属性时使用。
+
+  ```js
+  new Vue({
+    customOption: 'foo',
+    created: function () {
+      console.log(this.$options.customOption) // => 'foo'
+    }
+  })
+  ```
+
+- `vm.$parent`
+
+  当前实例的父实例。
+
+- `vm.$root`
+
+  当前组件树的**根 Vue 实例**。如果当前实例没有父实例，此实例将会是其自己。
+
+- `vm.$children`
+
+  Vue 实例数组 `Array<Vue instance>`，当前实例的直接子组件(非响应且无法保证顺序)。
+
+- `vm.$slots`
+
+  只读，类型：`{ [name: string]: ?Array<VNode> }`。
+  
+  用来访问被插槽分发的内容。每个具名插槽有其相应的属性 (例如：`slot="foo"` 中的内容将会在 `vm.$slots.foo` 中被找到)。`default` 属性包括了所有没有被包含在具名插槽中的节点。一般在[渲染函数](https://cn.vuejs.org/v2/guide/render-function.html)书写一个组件时使用。
+
+  ```js
+  Vue.component('blog-post', {
+    render: function (createElement) {
+      var header = this.$slots.header
+      var body   = this.$slots.default
+      var footer = this.$slots.footer
+      return createElement('div', [
+        createElement('header', header),
+        createElement('main', body),
+        createElement('footer', footer)
+      ])
+    }
+  })
+  ```
+
+- `vm.$scopedSlots`
+  
+  只读，类型 `{ [name: string]: props => Array<VNode> | undefined }`
+  
+  用来访问[作用域插槽](https://cn.vuejs.org/v2/guide/components-slots.html#%E4%BD%9C%E7%94%A8%E5%9F%9F%E6%8F%92%E6%A7%BD)。对于包括 `默认 slot` 在内的每一个插槽，该对象都包含一个返回相应 VNode 的函数。一般在[渲染函数](https://cn.vuejs.org/v2/guide/render-function.html)书写一个组件时使用。
+
+  Vue2.6.0+，所有的 `$slots` 现在都会作为函数暴露在 `$scopedSlots` 中。如果你在使用渲染函数，不论当前插槽是否带有作用域，我们都推荐始终通过 `$scopedSlots` 访问它们。
+
+- `vm.$refs`
+
+  持有注册过 `ref` 特性 的所有 DOM 元素和组件实例(如果在普通的 DOM 元素上使用，引用指向的就是 DOM 元素；如果用在子组件上，引用就指向组件实例)。`$refs` 只会在组件渲染完成之后生效且不是响应式的。常用于在 JavaScript 里直接访问一个子组件。
+
+  当 `ref` 和 `v-for` 一起使用的时候，`vm.$refs` 将会是一个包含了对应数据源的这些子组件的数组。
+
+  ```html
+  <!-- `vm.$refs.p` will be the DOM node -->
+  <p ref="p">hello</p>
+
+  <!-- `vm.$refs.child` will be the child component instance -->
+  <child-component ref="child"></child-component>
+  ```
+
+  ```js
+  // <input ref="input">
+  methods: {
+    // 用来从父级组件聚焦输入框
+    focus: function () {
+      this.$refs.input.focus()
+    }
+  }
+  ```
+
+- `vm.$isServer`
+
+  当前 Vue 实例是否运行于服务器。
+
+- `vm.$attrs`
+
+  包含了父作用域中不作为 `prop` 被识别 (且获取) 的特性绑定 (`class` 和 `style` 除外)。当一个组件没有声明任何 `prop` 时，这里会包含所有父作用域的绑定 (`class` 和 `style` 除外)，并且可以通过 `v-bind="$attrs"` 传入内部组件——在创建高级别的组件时非常有用。
+
+- `vm.$listeners`
+
+  包含了父作用域中的 (不含 `.native` 修饰器的) `v-on` 事件监听器。它可以通过 `v-on="$listeners"` 传入内部组件——在创建更高层次的组件时非常有用。
+
+### 实例方法
+
+#### [数据](https://cn.vuejs.org/v2/api/#%E5%AE%9E%E4%BE%8B%E6%96%B9%E6%B3%95-%E6%95%B0%E6%8D%AE)
+
+- `vm.$watch`：语法 `vm.$watch( expOrFn, callback, [options] )`
+  - `{string | Function} expOrFn`
+  - `{Function | Object} callback`
+  - `{Object} [options]`
+    - `{boolean} deep` 为了发现对象内部值的变化，可以在选项参数中指定 `deep: true`(监听数组的变动不需要)
+    - `{boolean} immediate` 在选项参数中指定 `immediate: true` 将立即以表达式的当前值触发回调
+
+  观察 Vue 实例变化的一个表达式或计算属性函数。回调函数得到的参数为新值和旧值(在变异 (不是替换) 对象或数组时，旧值将与新值相同，因为它们的引用指向同一个对象/数组。Vue 不会保留变异之前值的副本。)。表达式只接受监督的**键路径**。对于更复杂的表达式，用一个函数取代。`vm.$watch` 返回一个取消观察函数，用来停止触发回调。
+
+  ```js
+  // 键路径
+  vm.$watch('a.b.c', function (newVal, oldVal) {
+    // 做点什么
+  })
+
+  // 函数
+  var unwatch = vm.$watch(
+    function () {
+      // 表达式 `this.a + this.b` 每次得出一个不同的结果时
+      // 处理函数都会被调用。
+      // 这就像监听一个未被定义的计算属性
+      return this.a + this.b
+    },
+    function (newVal, oldVal) {
+      // 做点什么
+    }
+  );
+
+  // vm.$watch 返回一个取消观察函数，用来停止触发回调
+  unwatch();
+  ```
+
+- `vm.$set`：语法 `vm.$set( target, key, value )`
+  - `{Object | Array} target`
+  - `{string | number} key`
+  - `{any} value`
+
+  全局 `Vue.set` 的别名，向响应式对象中添加一个属性，并确保这个新属性同样是响应式的，且触发视图更新。对象不能是 Vue 实例，或者 Vue 实例的根数据对象。
+
+- `vm.$delete`：语法 `vm.$delete( target, key )`
+  - `{Object | Array} target`
+  - `{string | number} key`
+
+  全局 `Vue.delete` 的别名。删除对象的属性。如果对象是响应式的，确保删除能触发更新视图。这个方法主要用于避开 Vue 不能检测到属性被删除的限制。目标对象不能是一个 Vue 实例或 Vue 实例的根数据对象。
+
+#### [事件](https://cn.vuejs.org/v2/api/#%E5%AE%9E%E4%BE%8B%E6%96%B9%E6%B3%95-%E4%BA%8B%E4%BB%B6)
+
+- `vm.$on`：语法 `vm.$on( event, callback )`
+  - `{string | Array<string>} event` (数组只在 2.2.0+ 中支持)
+  - `{Function} callback`
+
+  监听当前实例上的自定义事件。事件可以由 `vm.$emit` 触发。回调函数会接收所有传入事件触发函数的额外参数。
+
+  ```js
+  vm.$on('test', function (msg) {
+    console.log(msg)
+  })
+  vm.$emit('test', 'hi')
+  // => "hi"
+  ```
+
+- `vm.$once`：语法 `vm.$once( event, callback )`
+  - `{string} event`
+  - `{Function} callback`
+
+  监听一个自定义事件，但是只触发一次，在第一次触发之后移除监听器。
+
+- `vm.$off`：语法 `vm.$off( [event, callback] )`
+  - `{string | Array<string>} event` (只在 2.2.2+ 支持数组)
+  - `{Function} [callback]`
+
+  移除自定义事件监听器。如果没有提供参数，则移除所有的事件监听器；如果只提供了事件，则移除该事件所有的监听器；如果同时提供了事件与回调，则只移除这个回调的监听器。
+
+- `vm.$emit`：语法 `vm.$emit( eventName, […args] )`
+
+  触发当前实例上的事件。附加参数都会传给监听器回调。
+
+#### 生命周期
+
+- `vm.$mount`：语法 `vm.$mount( [elementOrSelector] )`
+
+  如果 Vue 实例在实例化时没有收到 `el` 选项，则它处于“未挂载”状态，没有关联的 DOM 元素。可以使用 `vm.$mount()` 手动地挂载一个未挂载的实例。如果 `elementOrSelector` 参数缺失，模板将被渲染为文档之外的的元素，需要使用原生 DOM API 插入文档。方法返回实例 `vm` 自身。
+
+  ```js
+  var MyComponent = Vue.extend({
+    template: '<div>Hello!</div>'
+  })
+
+  // 创建并挂载到 #app (会替换 #app)
+  new MyComponent().$mount('#app')
+
+  // 同上
+  new MyComponent({ el: '#app' })
+
+  // 或者，在文档之外渲染并且随后挂载
+  var component = new MyComponent().$mount()
+  document.getElementById('app').appendChild(component.$el)
+  ```
+
+- `vm.$forceUpdate()`
+
+  迫使 Vue 实例重新渲染。注意它仅仅影响实例本身和插入插槽内容的子组件，而不是所有子组件。
+
+- `vm.$nextTick( [callback] )`
+
+  将回调延迟到下次 DOM 更新循环之后执行。在修改数据之后立即使用它，然后等待 DOM 更新。它跟全局方法 `Vue.nextTick` 一样，不同的是回调的 `this` 自动绑定到调用它的实例上。
+
+  ```js
+  new Vue({
+    // ...
+    methods: {
+      // ...
+      example: function () {
+        // 修改数据
+        this.message = 'changed'
+        // DOM 还没有更新
+        this.$nextTick(function () {
+          // DOM 现在更新了
+          // `this` 绑定到当前实例
+          this.doSomethingElse()
+        })
+      }
+    }
+  })
+  ```
