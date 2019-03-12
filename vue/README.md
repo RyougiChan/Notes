@@ -105,7 +105,9 @@ $ npm install --save-dev vue-cli
     </div>
   ```
 
-  - `v-on` 缩写 `@` 绑定事件 **监听器**。事件类型由参数指定。表达式可以是一个方法的名字或一个内联语句，如果没有修饰符也可以省略。用在普通元素上时，只能监听原生 DOM 事件。用在自定义元素组件上时，也可以监听子组件触发的自定义事件。
+  - `v-on`
+  
+    缩写 `@` 绑定事件 **监听器**。事件类型由参数指定。表达式可以是一个方法的名字或一个内联语句，如果没有修饰符也可以省略。用在普通元素上时，只能监听原生 DOM 事件。用在自定义元素组件上时，也可以监听子组件触发的自定义事件。在监听原生 DOM 事件时，方法以事件为唯一的参数。如果使用内联语句，语句可以访问一个 `$event` 属性：`v-on:click="handle('ok', $event)"`。
     [修饰符](https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener)
     - `.stop` 调用 `event.stopPropagation()`。
     - `.prevent` 调用 `event.preventDefault()`。
@@ -784,3 +786,48 @@ Vue.component('async-example', function (resolve, reject) {
     }
   })
   ```
+
+- `vm.$destroy`
+
+  完全销毁一个实例。清理它与其它实例的连接，解绑它的全部指令及事件监听器。触发 `beforeDestroy` 和 `destroyed` 的钩子。在大多数场景中你**不应该**调用这个方法。最好使用 `v-if` 和 `v-for` 指令以数据驱动的方式(修改涉及到的对象)控制子组件的生命周期。
+
+### 计算属性缓存
+
+**计算属性是基于它们的依赖进行缓存的。**只在相关依赖发生改变时它们才会重新求值。这就意味着下面代码中，只要 `message` 还没有发生改变，多次访问 `reversedMessage` 计算属性会立即返回之前的计算结果，而不必再次执行函数。(相比之下，每当触发重新渲染时，调用方法 `methods` 将总会再次执行函数。)
+
+```js
+var vm = new Vue({
+  el: '#example',
+  data: {
+    message: 'Hello'
+  },
+  computed: {
+    // 计算属性的 getter
+    reversedMessage: function () {
+      // `this` 指向 vm 实例
+      return this.message.split('').reverse().join('')
+    }
+  }
+})
+```
+
+计算属性默认只有 `getter` ，不过在需要时你也可以提供一个 `setter` ：
+
+```js
+// ...
+computed: {
+  fullName: {
+    // getter
+    get: function () {
+      return this.firstName + ' ' + this.lastName
+    },
+    // setter
+    set: function (newValue) {
+      var names = newValue.split(' ')
+      this.firstName = names[0]
+      this.lastName = names[names.length - 1]
+    }
+  }
+}
+// ...
+```

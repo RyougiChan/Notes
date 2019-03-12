@@ -178,7 +178,7 @@ HLSL 程序片段是在 `CGPROGRAM` 和 `ENDCG`关键字之间编写的，或者
 
   Unity中的着色器包含文件扩展名为 `.cginc`，内置的文件为：
   - `HLSLSupport.cginc` （自动包含）跨平台着色器的编译提供程序宏与定义
-  - `UnityShaderVariables.cginc ` （自动包含）常用的全局变量
+  - `UnityShaderVariables.cginc` （自动包含）常用的全局变量
   - `UnityCG.cginc` 常用的辅助函数，通常包含在 Unity 着色器中
   UnityCG.cginc 中的数据结构
     - `appdata_base` 顶点着色器(vertex shader)输入位置，法线，一个纹理坐标
