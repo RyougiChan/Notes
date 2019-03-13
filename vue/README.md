@@ -60,15 +60,17 @@ $ npm install --save-dev vue-cli
   <div v-html="html"></div>
   ```
 
-  - `v-show` 根据表达式之真假值，切换元素的 display CSS 属性。[条件渲染(伪物) v-show](https://cn.vuejs.org/v2/guide/conditional.html#v-show)
+  - `v-show` 根据表达式之真假值，切换元素的 display CSS 属性(总是渲染)。[条件渲染(伪物) v-show](https://cn.vuejs.org/v2/guide/conditional.html#v-show)
 
-  v-show 不支持 `<template>` 元素，也不支持 `v-else`
+  `v-show` 不支持 `<template>` 元素，也不支持 `v-else`
+
+  `v-if` 的切换开销大，`v-show` 则是初始渲染开销大，频繁切换使用 `v-show`，运行时经常改变则使用 `v-if`
 
   ```html
   <h1 v-show="ok">Hello!</h1>
   ```
 
-  - `v-if`, `v-else-if`(Vue2.1.0+), `v-else` 根据表达式的值的真假条件渲染元素。在切换时元素及它的数据绑定/组件被销毁并重建。如果元素是 `<template>` ，将提出它的内容作为条件块。[条件渲染](https://cn.vuejs.org/v2/guide/conditional.html)
+  - `v-if`, `v-else-if`(Vue2.1.0+), `v-else` 根据表达式的值的真假条件渲染元素(`v-if` 是惰性的，初始为假)。在切换时元素及它的数据绑定/组件被销毁并重建。如果元素是 `<template>` ，将提出它的内容作为条件块。[条件渲染](https://cn.vuejs.org/v2/guide/conditional.html)
 
   当和 `v-if` 一起使用时，`v-for` 的优先级比 `v-if` 更高。详见列表渲染教程
 
@@ -87,9 +89,14 @@ $ npm install --save-dev vue-cli
     </div>
   ```
 
+  [用 key 管理可复用的元素](https://cn.vuejs.org/v2/guide/conditional.html#%E7%94%A8-key-%E7%AE%A1%E7%90%86%E5%8F%AF%E5%A4%8D%E7%94%A8%E7%9A%84%E5%85%83%E7%B4%A0): Vue 会尽可能高效地渲染元素，通常会复用已有元素而不是从头开始渲染，使用 `key` 来表达元素是完全独立的，不要复用。
+
   - `v-for` 基于源数据多次渲染元素或模板块。此指令之值，必须使用特定语法 `alias in expression` ，为当前遍历的元素提供别名
 
-  从 2.6 起，`v-for` 也可以在实现了可迭代协议的值上使用，包括原生的 `Map` 和 `Set`。不过应该注意的是 Vue 2.x 目前并不支持可响应的 `Map` 和 `Set` 值，所以无法自动探测变更。
+    - 从 Vue 2.6 起，`v-for` 也可以在实现了可迭代协议的值上使用，包括原生的 `Map` 和 `Set`。不过应该注意的是 Vue 2.x 目前并不支持可响应的 `Map` 和 `Set` 值，所以无法自动探测变更。
+    - `v-for` 和 `<template>` 搭配可减少渲染次数
+    - `v-for` 和自定义组件使用时，需要使用 `props` 来传递值
+    - 当 Vue.js 用 `v-for` 正在更新已渲染过的元素列表时，它默认用[“就地复用”](https://cn.vuejs.org/v2/guide/list.html#key)策略。如果数据项的顺序被改变，Vue 将不会移动 DOM 元素来匹配数据项的顺序，而是简单复用此处每个元素，并且确保它在特定索引下显示已被渲染过的每个元素。这个默认的模式是高效的，但是只适用于**不依赖子组件状态或临时 DOM 状态 (例如：表单输入值) 的列表渲染输出**。建议尽可能在使用 `v-for` 时提供 `key`，除非遍历输出的 DOM 内容非常简单，或者是刻意依赖默认行为以获取**性能上的提升**。
 
   ```html
     <div v-for="item in items">
@@ -99,6 +106,7 @@ $ npm install --save-dev vue-cli
     <div v-for="(item, index) in items"></div>
     <div v-for="(val, key) in object"></div>
     <div v-for="(val, key, index) in object"></div>
+
     <!-- v-for 默认行为试着不改变整体，而是替换元素。迫使其重新排序的元素，你需要提供一个 key 的特殊属性： -->
     <div v-for="item in items" :key="item.id">
         {{ item.text }}
@@ -196,6 +204,8 @@ $ npm install --save-dev vue-cli
     <!-- style 绑定 -->
     <div :style="{ fontSize: size + 'px' }"></div>
     <div :style="[styleObjectA, styleObjectB]"></div>
+    <!-- v-bind:style可以使用多重值的形式 -->
+    <div :style="display:['-webkit-box','-ms-flexbox', 'flex']"></div>
 
     <!-- 绑定一个有属性的对象 -->
     <div v-bind="{ id: someProp, 'other-attr': otherProp }"></div>
@@ -830,4 +840,63 @@ computed: {
   }
 }
 // ...
+```
+
+### 侦听器 `watch`
+
+Vue 通过 `watch` 选项提供了一个方法来来响应数据的变化。当需要在数据变化时**执行异步**或**开销较大**的操作时，这个方式是最有用的。
+
+```html
+<div id="watch-example">
+  <p>
+    Ask a yes/no question:
+    <input v-model="question">
+  </p>
+  <p>{{ answer }}</p>
+</div>
+<!-- 因为 AJAX 库和通用工具的生态已经相当丰富，Vue 核心代码没有重复 -->
+<!-- 提供这些功能以保持精简。这也可以让你自由选择自己更熟悉的工具。 -->
+<script src="https://cdn.jsdelivr.net/npm/axios@0.12.0/dist/axios.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lodash@4.13.1/lodash.min.js"></script>
+<script>
+var watchExampleVM = new Vue({
+  el: '#watch-example',
+  data: {
+    question: '',
+    answer: 'I cannot give you an answer until you ask a question!'
+  },
+  watch: {
+    // 如果 `question` 发生改变，这个函数就会运行
+    question: function (newQuestion, oldQuestion) {
+      this.answer = 'Waiting for you to stop typing...'
+      this.debouncedGetAnswer()
+    }
+  },
+  created: function () {
+    // `_.debounce` 是一个通过 Lodash 限制操作频率的函数。
+    // 在这个例子中，我们希望限制访问 yesno.wtf/api 的频率
+    // AJAX 请求直到用户输入完毕才会发出。想要了解更多关于
+    // `_.debounce` 函数 (及其近亲 `_.throttle`) 的知识，
+    // 请参考：https://lodash.com/docs#debounce
+    this.debouncedGetAnswer = _.debounce(this.getAnswer, 500)
+  },
+  methods: {
+    getAnswer: function () {
+      if (this.question.indexOf('?') === -1) {
+        this.answer = 'Questions usually contain a question mark. ;-)'
+        return
+      }
+      this.answer = 'Thinking...'
+      var vm = this
+      axios.get('https://yesno.wtf/api')
+        .then(function (response) {
+          vm.answer = _.capitalize(response.data.answer)
+        })
+        .catch(function (error) {
+          vm.answer = 'Error! Could not reach the API. ' + error
+        })
+    }
+  }
+})
+</script>
 ```
