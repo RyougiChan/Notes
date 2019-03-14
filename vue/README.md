@@ -318,12 +318,29 @@ $ npm install --save-dev vue-cli
   </ul>
   ```
 
+### 特殊特性
+
+- `is` 值：`string | Object (组件的选项对象)`
+
+用于动态组件且基于 [DOM 内模板的限制](https://vuejs.org/v2/guide/components.html#DOM-Template-Parsing-Caveats)来工作。
+
+```html
+<!-- 当 `currentView` 改变时，组件也跟着改变 -->
+<component v-bind:is="currentView"></component>
+
+<!-- 这样做是有必要的，因为 `<my-row>` 需要放在一个`<table>` 内才会被挂载，类似的还有 `li` 元素需要放在 `<ul>` 中才能生效，这样可以避开一些潜在的浏览器解析错误 -->
+<table>
+  <tr is="my-row"></tr>
+</table>
+```
+
 ### vue 自定义组件
 
 > 组件声明格式：组件名大小写使用 `kebab-case` 或 `PascalCase`。每个组件必须只有一个根元素，否则 Vue 会显示错误 `every component must have a single root element`
 
 ```js
 // 全局注册
+// 通过 Vue.component() 全局注册的组件可在其被注册后的任何通过 new Vue() 创建的实例所使用，包含其组件树中的所有组件
 Vue.component('ComponentName',{
   data: function() {
     return {
@@ -900,3 +917,43 @@ var watchExampleVM = new Vue({
 })
 </script>
 ```
+
+### 数组更新检测
+
+- 变异方法
+
+  Vue 包含一组观察数组的变异方法，调用以下数组方法将会触发视图更新
+  `push()`, `pop()`, `shift()`, `unshift()`, `splice()`, `sort()`, `reverse()`
+
+- 非变异方法
+
+  调用数组的非变异方法返回一个新数组，不会改变原始数组。当使用非变异方法时，可以用新数组替换旧数组。
+
+- 由于 JavaScript 的限制，Vue 不能检测到数组索引赋值（使用 `Vue.set()`/`vm.$set()` 解决）和修改 `length` 长度赋值(使用 `Array.prototype.splice()` 解决)的情况
+
+```js
+Vue.set(vm.items, indexOfItem, newValue)
+
+vm.items.splice(indexOfItem, 1, newValue)
+```
+
+### 对象更新检测
+
+Vue 可以检测对象属性的修改，但由于 JavaScript 的限制，不能检测对象属性的添加或删除(使用 `Vue.set(object, key, value)`/`vm.$set()` 或 `Object.assign` 解决)
+
+```js
+Vue.set(vm.userProfile, 'age', 27)
+
+vm.userProfile = Object.assign({}, vm.userProfile, {
+  age: 27,
+  favoriteColor: 'Vue Green'
+})
+```
+
+### 修饰符
+
+- 事件修饰符，它们可串联使用：`.stop`、`.prevent`、`.capture`、`.self`、`.once`、`.passive`(尤其适合移动端)
+`.passive` 同时和 `.prevent` 使用时，后者会被忽略
+- 按键修饰符: `.enter`、`.tab`、`.delete`、`.esc`、`.space`、`.up`、`.down`、`.left`、`.right`
+- 系统按键修饰符: `.ctrl`、`.alt`、`.shift`、`.meta(⌘|⊞|◆)`、`.exact` (允许精确控制系统修饰符组合键触发)
+- 鼠标修饰符： `.left`、`.right`、`.middle`
