@@ -13,7 +13,7 @@
 
 - HLSL: `High Level Shading Language`, DirectX
   由微软控制着色器的编译，就算使用了不同的硬件，同一个着色器的编译
-结果也是一样的（前提是版本相同）。但支持 HLGL 的平台有限，几乎完全是微软自家的产品(Windows 、Xbox 360、PS3 等)。
+结果也是一样的（前提是版本相同）。但支持 HLGL 的平台有限，几乎完全是微软自家的产品(Windows、Xbox 360 等)。
 - GLSL: `OpenGL Shading Language`, OpenGL
   GLSL 依赖硬件，而非操作系统层级。但这也意味着 GLSL 的编译结果将取决于硬件供应商，不同硬件供应商对 GLSL 的编译实现差异将导致编译结果的不一致。
 - CG: `C for Graphic`, NVIDIA
@@ -244,20 +244,210 @@ SubShader 的标签(`Tags`)是一个键值对 (Key/Value Pair), 它的键和值�
 | ForceNoShadowCasting  | 控制使用该 SubShader 的物体是否会投射阴影 | `Tags { "ForceNoShadowCasting" = "True" }` |
 | lgnoreProjeclor | 如果该标签值为 `"True"`, 那么使用该 SubShader 的物体将不会受 Projector 的影响。通常用于半透明物体 | `Tags { "JgnoreProjector" = "True" }` |
 | CanUseSpriteAtlas  | 当该 SubShader 是用于精灵(sprites)时，将该标签设为`"False"` | `Tags { "CanUseSpriteAtlas" = "False")` |
-| PreviewType | 指明材质面板将如何预览该材质。默认情况下，材质将显示为一个球形，我们可以通过把该标签的值设为 "Plane" "SkyBox"来改变预览类型 | `Tags { "PreviewType" = "Plane")` |
+| PreviewType | 指明材质面板将如何预览该材质。默认情况下，材质将显示为一个球形，我们可以通过把该标签的值设为 `"Plane"` `"SkyBox"`来改变预览类型 | `Tags { "PreviewType" = "Plane")` |
 
 ***Pass 的标签块支待的标签类型***
 | 标签类型  | 说明 | 例子 |
 | -------  | --- | ---  |
 | LightMode    | 定义该 Pass 在 Unity 的渲染流水线中的角色 | `Tags { "LightMode" = "ForwardBase" }` |
-| RequireOptions    | 指定当满足某些条件时才渲染该 Pass, 它的值是一个由空格分隔的字符串。目前，Unity5 支持的选项有：Soft Vegetation。在后面的版本中， 可能会增加更多的选项 | `Tags { "RequireOptions" = "Soft Vegetation" }` |
+| RequireOptions    | 指定当满足某些条件时才渲染该 Pass, 它的值是一个由空格分隔的字符串。目前，Unity5 支持的选项有：`Soft Vegetation`。在后面的版本中， 可能会增加更多的选项 | `Tags { "RequireOptions" = "Soft Vegetation" }` |
 
 #### Fallback
 
-它指示程序在当前 Shader 中没有可以在用户的​​图形硬件上运行的 SubShaders 时应该使用哪个 Shader 来替代
+它指示程序在当前 Shader 中没有可以在用户的​​图形硬件上运行的 SubShader 时应该使用哪个 Shader 来替代，为每个 Unity Shader 正确设置 `Fallback` 是非常堂要的。
 
 ```cs
 Fallback "name"
 // or
 Fallback Off
 ```
+
+#### 其他语义(不常用)
+
+- `CustomEditor` 自定义材质面板的编辑界面
+
+```cs
+Shader "example" {
+    // properties and subshaders here...
+    CustomEditor "MyCustomEditor"
+}
+```
+
+- `Category` 对 UnityShader 中的命令进行分组
+
+```cs
+Shader "example" {
+    Category {
+        Fog { Mode Off }
+        Blend One One
+        SubShader {
+            // ...
+        }
+        SubShader {
+            // ...
+        }
+        // ...
+    }
+}
+```
+
+### Unity Shader 的形式
+
+**在 Unity 里。Unity Shader 实际上指的是一个 ShaderLab 文件 —— 硬盘上以 `.shader` 为后缀的一种文件。**
+
+#### 表面着色器 ([Surface Shader](https://docs.unity3d.com/Manual/SL-SurfaceShaders.html))
+
+Unity 自己创造的一种着色器代码类型。它需要的代码量很少，Unity 在背后做了很多工作，但渲染的代价比较大。其本质还是**顶点／片元着色器**，它存在的价值在于，Unity 为我们处理了很多光照细节。
+
+表面着色器被定义在 SubShader 语义块（而非 Pass 语义块）中的 `CGPROGRAM` 和 `ENDCG` 之间。原因是，表面着色器不需要开发者关心使用多少个 Pass、每个 Pass 如何渲染等问题，Unity 会在背后为我们做好这些事情。
+
+***表面着色器简例***
+
+```cs
+Shader "Custom/Simple Surface Shader" {
+  SubShader {
+    Tags { "RebderType" = "Opaque" }
+    CGPROGRAM
+    #pragma surface surf Lambert
+    struct Input {
+      float4 color : COLOR;
+    }
+    void surf (Input IN, inout SUrfaceOutput o) {
+      o.Albedo = 1;
+    }
+    ENDCG
+  }
+  Fallback "Diffuse"
+}
+```
+
+#### 顶点/片元着色器([Vertex/Fragment Shader](https://docs.unity3d.com/Manual/SL-ShaderPrograms.html))
+
+[Shader入门其之二](Unity_Docs.md#Shader入门其之二)
+
+顶点／片元着色器是写在 Pass 语义块内，而非SubShader内的。原因是我们需要自已定义每个 Pass 需要使用的 Shader 代码。我们**可以控制渲染的实现细节**。
+
+***顶点/片元着色器简例***
+
+```cs
+Shader "Custom/Simple VertexFragment Shader" {
+  SubShader {
+    Pass {
+      CGPROGRAM
+
+      #pragma vertex vert
+      #pragma fragment frag
+
+      float4 vert (float4 v : POSITION) : SV_POSITION {
+        return mul(UNITY_MATRIX_MVP, v);
+      }
+
+      fixed4 frag () : SV_Target {
+        return fixed4(1.0, 0.0, 0.0, 1.0);
+      }
+
+      ENDCG
+    }
+  }
+}
+```
+
+#### 固定函数着色器
+
+[Shader入门其之一](#Unity_Docs.md#Shader入门其之一)
+
+对于不支持**可编程管线着色器**(表面|顶点/片元着色器)的设备，需要使用**固定函数着色器 (Fixed Function Shader)**来完成渲染。这些着色器往往只可以完成一些非常简单的效果。
+
+固定函数着色器的代码被定义在 Pass 语义块中，需要完全使用 ShaderLab 的语法编写。由于现在绝大多数 GPU 都支待可编程的渲染管线，这种固定管线的编程方式已经逐渐被**抛弃**。实际上，在 Unity 5.2 中，所有固定函数着色器都会被 Unity 编译成对应的顶点/片元着色器。
+
+***固定函数着色器***
+
+```cs
+Shader "Tutorial/Basic" {
+  Properties {
+    Color ("Main Color", Color) = (1, 0.5, 0.5, 1)
+  }
+  SubShader {
+    Pass {
+      Material {
+        Diffuse [_Color]
+      }
+      Lighting On
+    }
+  }
+}
+```
+
+## Shader 数学基础
+
+### 笛卡尔坐标系
+
+#### 二维笛卡尔坐标系
+
+屏幕映射中，OpenGL 和 DirecX 使用不同的二维笛卡尔坐标系
+
+![在屏幕映射时，OpenGL和DirectX使用了不同方向的二维笛卡尔坐标系](http://static.zybuluo.com/candycat/s4twn4lnbvlac7ci3mwwbe4d/2d_cartesian_opengl_directx.png)
+
+#### 三维笛卡尔坐标系
+
+- 左手坐标系 (left-handed coordinate space)
+  正向旋转的定义：左手法则
+- 右手坐标系 (right-handed coordinate space)
+  正向旋转的定义：右手法则
+
+#### Unity 使用的坐标系
+
+- 模型空间和世界空间：左手坐标系
+
+- 观察空间：右手坐标系
+  观察空间，通俗来讲就是**以摄像机为原点**的坐标系。在这个坐标系中，摄像机的前向是z轴的负方向，这与在模型空间和世界空间中的定义相反。也就是说，z轴坐标的减少意味着场景深度的增加。
+  ![在Unity中，观察空间使用的是右手坐标系，摄像机的前向是z轴的负方向，z轴越小，物体的深度越大，离摄像机越远](http://static.zybuluo.com/candycat/lrhkf34n8p5fz7mzyro7r72m/unity_camera_cartesian.png)
+
+### 点和矢量
+
+#### 矢量运算
+
+- 矢量和标量的乘法／除法
+
+  从儿何意义上看，把一个矢量 `v` 和一个标量 `k` 相乘，意味着对矢量 `v` 进行一个大小为 `|k|` 的缩放。
+- 矢量的加法和减法
+  
+  可以对两个矢雇进行相加【三角形定则(triangle rule)】或相减，其结果是一个相同维度的新矢量。只需要把两个矢量的对应分批进行相加或相减即可。
+  
+  一个矢量不可以和一个标量相加或相减，或者是和不同维度的矢量进行运算。
+- 矢量的模
+
+  模可理解为矢量在空间中的长度
+- 单位矢量
+
+  单位矢量指的是那些**模为 1**的矢量。单位矢量也被称为被`归一化的矢量(normalizedvector)`。对任何给定的非零矢量，把它转换成单位矢量的过程就被称为`归一化(normalization)`。
+
+  零矢量不可以被归一化。
+
+- 矢量的点积(内积)
+
+  矢量的点积一个很重要的几何意义是**投影(projection)**。
+
+  - 公式一：
+    `a·b = (ax, ay, az)·(bx, by, bz) = axbx + ayby + azbz`
+    - 性质一：
+      `(ka)·b = a·(kb) = k(a·b)`
+    - 性质二：
+      `a·(b+c) = a·b + a·c`
+    - 性质三：
+      `a·a = |a|^2`
+  - 公式二：
+    `a·b = |a||b|cosθ`
+- 矢量的叉积(外积)
+
+  对两个矢最进行叉积的结果会得到一个同时垂直于这两个矢量的新矢量。最常见的一个应用就是计算垂直于一个平面、三角形的矢量。另外，还可以用于判断三角面片的朝向。
+
+  - 公式：
+  `a x b = (ax, ay, az) x (bx, by, bz) = (aybz - azby, azbx - axbz, axby - aybx)`
+  ![三维矢量叉积的计算规律](http://static.zybuluo.com/candycat/yrl5ol849v5h8892l4bqlgrh/vector_cross_diagram.png)
+
+  - 模
+  `|a x b| = |a||b|sinθ`
+
+  - 方向
+  由`a`转动到`b`时右手定则大拇指指向

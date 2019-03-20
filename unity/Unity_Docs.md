@@ -175,6 +175,8 @@ Shader "Tutorial/Display Normals" {
 
 ### [编写顶点和片元着色器](https://docs.unity3d.com/Manual/SL-ShaderPrograms.html)
 
+[NVIDIA CG DOCS](http://http.developer.nvidia.com/CG/)
+
 着色器程序是用 [HLSL(High-Level Shading Language)](https://docs.unity3d.com/Manual/SL-ShadingLanguage.html) 语言编写的，方法是在 Pass 命令中的某处着色器文本中嵌入“片段”
 
 #### HLSL 片段
