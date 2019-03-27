@@ -225,7 +225,7 @@ Pass {
 |-------|------|----|
 | Cull  | Cull Back / Front / Off | 设置剔除模式：剔除背面/正面/关闭剔除|
 | ZTest | ZTest Less Greater / LEqual / GEqual / Equal / NotEqual / Always | 设咒深度测试时使用的函数 |
-| Zwrite| ZWrite On / Off  | 开启／关闭深度写入 |
+| Zwrite| ZWrite On / Off  | 开启/关闭深度写入 |
 | Blend | Blend SrcFactor DstFactor | 开启并设置混合模式 |
 
 - [Tags]
@@ -297,7 +297,7 @@ Shader "example" {
 
 #### 表面着色器 ([Surface Shader](https://docs.unity3d.com/Manual/SL-SurfaceShaders.html))
 
-Unity 自己创造的一种着色器代码类型。它需要的代码量很少，Unity 在背后做了很多工作，但渲染的代价比较大。其本质还是**顶点／片元着色器**，它存在的价值在于，Unity 为我们处理了很多光照细节。
+Unity 自己创造的一种着色器代码类型。它需要的代码量很少，Unity 在背后做了很多工作，但渲染的代价比较大。其本质还是**顶点/片元着色器**，它存在的价值在于，Unity 为我们处理了很多光照细节。
 
 表面着色器被定义在 SubShader 语义块（而非 Pass 语义块）中的 `CGPROGRAM` 和 `ENDCG` 之间。原因是，表面着色器不需要开发者关心使用多少个 Pass、每个 Pass 如何渲染等问题，Unity 会在背后为我们做好这些事情。
 
@@ -325,7 +325,7 @@ Shader "Custom/Simple Surface Shader" {
 
 [Shader入门其之二](Unity_Docs.md#Shader入门其之二)
 
-顶点／片元着色器是写在 Pass 语义块内，而非SubShader内的。原因是我们需要自已定义每个 Pass 需要使用的 Shader 代码。我们**可以控制渲染的实现细节**。
+顶点/片元着色器是写在 Pass 语义块内，而非SubShader内的。原因是我们需要自已定义每个 Pass 需要使用的 Shader 代码。我们**可以控制渲染的实现细节**。
 
 ***顶点/片元着色器简例***
 
@@ -407,7 +407,7 @@ Shader "Tutorial/Basic" {
 
 #### 矢量运算
 
-- 矢量和标量的乘法／除法
+- 矢量和标量的乘法/除法
 
   从儿何意义上看，把一个矢量 `v` 和一个标量 `k` 相乘，意味着对矢量 `v` 进行一个大小为 `|k|` 的缩放。
 - 矢量的加法和减法
@@ -857,4 +857,81 @@ M(view) =  ⎢ 0  0  -1  0 ⎥⎢ 0  1   kz  0 ⎥⎢ 0   0   0   0 ⎥⎢ 0  0 
   // z 分量会被用于深度缓冲。
   ```
 
-在 Unity 中，从裁剪空间到屏菇空间的转换是由 Unity 帮我们完成的。我们的顶点着色器只需要把顶点转换到裁剪空间即可。
+在 Unity 中，从裁剪空间到屏幕空间的转换是由 Unity 帮我们完成的。我们的顶点着色器只需要把顶点转换到裁剪空间即可。
+
+#### 法线变换
+
+当我们变换一个模型的时候，不仅需要变换它的顶点，还需要**变换顶点法线**，以便在后续处理（如片元着色器）中计算光照等。
+
+变换矩阵推导：
+
+```cs
+// 我们使用 3x3 的变换矩阵M(A-B)来变换顶点
+// 1. 切线变换
+// T(A)和T(B)分别表示在坐标空间A下和坐标空间B下的切线方向
+T(B) = M(A-B)T(A)
+
+// 2. 同一个顶点的切线T(A)和法线N(A)必须满足垂直条件
+T(A)·N(A) = 0
+
+// 3. 欲求矩阵G来变换法线N(A)得到坐标空间B下法线N(B)
+T(B)·N(B) = [M(A-B)T(A)]·[GN(A)] = 0
+
+// 中间的变换实在是看不懂直接上结果
+G = [M(A-B)^T]^-1 = [M(A-B)^-1]^T
+
+// 如果变换矩阵 M(A-B) 是正交矩阵(如只有旋转变换)
+G = M(A-B)
+
+// 如果变换包括旋转和同一缩放k
+G = M(A-B)/k
+```
+
+### unity Shader 的内置变量
+
+#### 变换矩阵
+
+***Unity内置的变换矩阵(float4x4)***
+
+| 变量名 | 描述 |
+| ----- | ---- |
+| `UNITY_MATRIX_MVP` | 当前的模型·观察·投影矩阵，用于将顶点/方向矢量从模型空间变换到裁剪空间 |
+| `UNITY_MATRIX_MV` | 当前的模型·观察矩阵，用于将顶点/方向矢量从模型空间变换到观察空间 |
+| `UNITY_MATRIX_V` | 当前的观察矩阵，用于将顶点/方向矢量从世界空间变换到观察空间 |
+| `UNITY_MATRIX_P` | 当前的投影矩阵，用于将顶点/方向矢量从观察空间变换到裁剪空间 |
+| `UNITY_MATRIX_VP` | 当前的观察·投影矩阵，用于将顶点/方向矢量从世界空间变换到裁剪空间
+UNITY_MATRIX_ |
+| `UNITY_MATRIX_T_MV` | `UNITY_MATRIX_MV` 的转置矩阵 |
+| `UNITY_MATRIX_IT_MV` | `UNITY_MATRIX_MV` 的逆转置矩阵，用于将法线从模型空间变换到观察空间，也可用于得到 `UNITY_MATRIX_MV` 的逆矩阵 |
+| `_Object2World` | 当前的模型矩阵，用于将顶点/方向矢量从模型空间变换到世界空间 |
+| `_World20bject` | `_Object2World` 的逆矩阵，用于将顶点/方向矢量从世界空间变换到模型空间 |
+
+> 矩阵 `UNITY_MATRIX_IT_MV` 特殊说明：
+
+```cs
+// 方法一：
+// 使用 transpose 函数对 UNITY_MATRIX_IT_MV 进行转置，
+// 得到 UNITY_MATRIX_MV 的逆矩阵，然后进行列矩阵乘法，
+// 把观察空间中的点或方向矢量变换到模型空间中
+float4 modelPos = mul(transpose(UNITY_MATRIX_IT_MV), viewPos);
+
+// 方法二：
+// 不直接使用转置函数 transpose, 而是交换 mul 参数的位置，使用行矩阵乘法
+// 本质和方法一是完全一样的
+float4 modelPos : mul(viewPos, UNITY_MATRIX_IT_MV);
+```
+
+#### 摄像机和屏幕参数
+
+***Unity 内置的摄像机和屏幕参数***
+
+| 变量名 | 类型 | 描述 |
+| ----- | ---- | --- |
+| `_WorldSpaceCameraPos` | float3 | 该摄像机在世界空间中的位置 |
+| `_ProjectionParams` | float4 | x = 1.0 (或-1.0，如果正在使用一个翻转的投影矩阵进行渲染)，y = Near，z = Far，w = 1.0+1.0/Far，其中 Near 和 Far 分别是近裁切平面和远裁切平面和摄像机的距离 |
+| `_ScreenParams` | float4 | x = width, y = height, z = 1.0 + 1.0/width, w = 1.0 + 1.0/height, 其中 width 和 height 分别是该摄像机的渲染目标 (render target) 的像素宽度和高度 |
+| `_ZBufferParams` | float4 | x = 1- Far/Near, y= Far/Near, z = x/Far, w = y/Far, 该变量用于线性化 Z 缓存中的深度值 |
+| `unity_OrthoParams`  | float4 | x = width, y = height, z 没有定义， w = 1.0 (该摄像机是正交摄像机）或 w = 0.0 (该摄像机是透视摄像机），其中 width 和 height 是正交投影摄像机的宽度和高度 |
+| `unity_CameraProjection`  | float4x4 | 该摄像机的投影矩阵 |
+| `unity_CameraInvProjection`  | float4x4 | 该摄像机的投影矩阵的逆矩阵 |
+| `unity_CameraWorldClipPlanes[6]`  | float4 | 该摄像机的6个裁剪平面在世界空间下的等式，按如下顺序：左、右、 下、上、近、远裁剪平面 |
