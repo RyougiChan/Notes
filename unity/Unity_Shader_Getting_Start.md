@@ -928,10 +928,172 @@ float4 modelPos : mul(viewPos, UNITY_MATRIX_IT_MV);
 | 变量名 | 类型 | 描述 |
 | ----- | ---- | --- |
 | `_WorldSpaceCameraPos` | float3 | 该摄像机在世界空间中的位置 |
-| `_ProjectionParams` | float4 | x = 1.0 (或-1.0，如果正在使用一个翻转的投影矩阵进行渲染)，y = Near，z = Far，w = 1.0+1.0/Far，其中 Near 和 Far 分别是近裁切平面和远裁切平面和摄像机的距离 |
-| `_ScreenParams` | float4 | x = width, y = height, z = 1.0 + 1.0/width, w = 1.0 + 1.0/height, 其中 width 和 height 分别是该摄像机的渲染目标 (render target) 的像素宽度和高度 |
-| `_ZBufferParams` | float4 | x = 1- Far/Near, y= Far/Near, z = x/Far, w = y/Far, 该变量用于线性化 Z 缓存中的深度值 |
-| `unity_OrthoParams`  | float4 | x = width, y = height, z 没有定义， w = 1.0 (该摄像机是正交摄像机）或 w = 0.0 (该摄像机是透视摄像机），其中 width 和 height 是正交投影摄像机的宽度和高度 |
+| `_ProjectionParams` | float4 | `x = 1.0` (或-1.0，如果正在使用一个翻转的投影矩阵进行渲染)，`y = Near`，`z = Far`，`w = 1.0+1.0/Far`，其中 Near 和 Far 分别是近裁切平面和远裁切平面和摄像机的距离 |
+| `_ScreenParams` | float4 | `x = width`, `y = height`, `z = 1.0 + 1.0/width`, `w = 1.0 + 1.0/height`, 其中 width 和 height 分别是该摄像机的渲染目标 (render target) 的像素宽度和高度 |
+| `_ZBufferParams` | float4 | `x = 1- Far/Near`, `y= Far/Near`, `z = x/Far`, `w = y/Far`, 该变量用于线性化 Z 缓存中的深度值 |
+| `unity_OrthoParams`  | float4 | `x = width`, `y = height`, z 没有定义， `w = 1.0` (该摄像机是正交摄像机）或 `w = 0.0` (该摄像机是透视摄像机），其中 width 和 height 是正交投影摄像机的宽度和高度 |
 | `unity_CameraProjection`  | float4x4 | 该摄像机的投影矩阵 |
 | `unity_CameraInvProjection`  | float4x4 | 该摄像机的投影矩阵的逆矩阵 |
 | `unity_CameraWorldClipPlanes[6]`  | float4 | 该摄像机的6个裁剪平面在世界空间下的等式，按如下顺序：左、右、 下、上、近、远裁剪平面 |
+
+#### CG 语言中的矢量和矩阵
+
+在CG中，矩阵类型是由 `float3x3`、`float4x4` 等关键词进行声明和定义的。而对于 `float3`、`float4` 等类型的变量，我们既可以把它当成一个矢量，也可以把它当成是一个 `1xn` 的行矩阵或者一个 `nx1` 的列矩阵。这取决于运算的种类和它们在运算中的位置(例如点积属于矢量操作)。
+
+- 在进行矩阵乘法时，参数的位置将决定是按列矩阵还是行矩阵进行乘法。在CG中，矩阵 乘法是通过 `mul` 函数实现的。
+
+```cs
+mul(M,v) == mul(v, tranpose(M))
+mul(v,M) = mul(tranpose(M), v)
+```
+
+- CG 使用的是**行优先**的方法去填充矩阵，且访问一个矩阵中的元素时，也是**按行索引**的。
+- Unity 在脚本中提供了一种矩阵类型 `Matrix4x4`，这个矩阵类型则是采用**列优先**的方式。
+
+#### Unity 中的屏幕坐标：ComputeScreenPos/VPOS/WPOS
+
+在顶点/片元着色器中获得片元的屏幕坐标的方法：
+
+- 方法1. 在片元着色器的输入中声明 VPOS 或 WPOS 语义(VPOS 是 HLSL 中对屏幕坐标的语义，而 WPOS 是 CG 中对屏幕坐标的语义)
+
+```cs
+fixed4 frag(float4 sp : VPOS) : SV_Target {
+  // 用屏幕坐标除以屏幕分辨率 _ScreenParams.xy 得到视口空间中的坐标
+  // 视口坐标：屏幕坐标归一化，屏幕左下角就是(0, 0),右上角就是(1, 1)。
+  return fixed4(sp.xy/_ScreenParams.xy, 0.0, 1.0);
+}
+```
+
+- 方法2. 使用 `UnityCG.cginc` 中定义的 `ComputeScreenPos` 函数。首先在顶点着色器中将 `ComputeScreenPos` 的结果保存在输出结构体中，然后在片元着色器中进行一个齐次除法运算后得到视口空间下的坐标。这种方法实际上是手动实现了屏幕映射的过程，而且它得到的坐标直接就是视口空间中的坐标。
+
+```cs
+struct vertOut {
+  float4 pos : SV_POSITION;
+  float4 scrPos : TEXCOORD0;
+}
+
+vertOut vert(appdata_base v) {
+  vertOut o;
+  o.pos = mul (UNITY_MATRIX_MVP, v.vertex);
+  // 1. 把 ComputeScreenPos 的结果保存到 scrPos 中
+  o.scrPos = ComputeScreenPos(o.pos);
+  return o;
+}
+
+fixed4 frag (vertOut i) : SV_Target {
+  // 2. 用 scrPos.xy 除以 scrPos.w 得到视口空间中的坐标
+  float2 wcoord = (i.scrPos.xy / i.scrPos.w);
+  return fixed4(wcoord, 0.0, 1.0);
+}
+```
+
+## Shader 基础
+
+### 认识顶点/片元着色器
+
+顶点/片元着色器完整示例代码 [ここてまる](Assets/Shader/Tutorial_Shader_template.shader)
+
+***SimpleShader.shader***
+
+```cs
+Shader "Unity Shaders Book/Chapter 5/Simple Shader" {
+  SubShader {
+    Pass {
+      CGPROGRAM
+
+      // 告知 Unity, 哪个函数包含了顶点着色器的代码 `#pragma vertex name`
+      #pragma vertex vert
+      // 告知 Unity, 哪个函数包含了片元着色器的代码 `#progma fragment name`
+      #progma fragment frag
+
+      // POSITION 和 SV_POSITION 都是 CG/HLSL 中的语义 (semantics), 它们是不可省略的，这些语义将告诉系统用户需要哪些输入值，以及用户的输出是什么。
+      // POSITION 告诉 Unity, 把模型的顶点坐标填充到输入参数 v 中
+      // SV_POSITION 告诉 Unity, 顶点着色器的输出是裁剪空间中的顶点坐标
+      float4 vert(float4 v : POSITION) : SV_POSITION {
+        returnb mul(UNITY_MATRIX_MVP, v);
+      }
+
+      // SV_Target 也是 CG/HLSL 中的语义 (semantics)，它等同于告诉渲染器，把用户的输出颜色存储到一个渲染目标 (render target) 中，这里将输出到默认的帧缓存中。
+      fixed4 frag() : SV_Target {
+        return fixed4(1.0,1.0,1.0,1.0);
+      }
+
+      ENDCG
+    }
+  }
+}
+```
+
+材质提供给我们一个可以方便地调节 Unity Shader 中参数的方式，通过这些参数， 我们可以随时调整材质的效果。而这些参数就需要写在 `Properties` 语义块中。
+
+```cs
+// ...
+Properties {
+  // 声明格式 `name ("display name",type)=default value`
+  _Colour ("_Colour",Color) = (1,1,1,1)
+  _MainTexture ("Mian Texture",2D) = "white"{}
+  _DissolveTexture ("Dissolve Texture", 2D) = "white" {}
+  _DissolveCutoff ("Dissolve Cutoff", Range(0, 1)) = 1
+  _ExtrudeAmount ("Extrue Amount", float) = 0
+}
+// ...
+float4 _Colour;
+sampler2D _MainTexture;
+sampler2D _DissolveTexture;
+float _DissolveCutoff;
+float _ExtrudeAmount;
+// ...
+```
+
+***Shaderlab 属性类型和 CG 变量类型的匹配关系***
+
+| Shaderlab属性类型 | CG变量类型 |
+| ---------------- | --------- |
+| Color, Vector  | float4, half4, fixed4 |
+| Range, Float  | float, half, fixed |
+| 2D | sampler2D |
+| Cube | samplerCube |
+| 3D | sampler3D |
+
+### Unity 内置文件和变量
+
+Unity 内置文件和变量 [ここてまる](Unity_Docs.md#HLSL%20片段)
+
+### 语义(semantic)
+
+参考文档 [Semantics](https://docs.microsoft.com/en-us/windows/desktop/direct3dhlsl/dx-graphics-hlsl-semantics)
+
+语义是附加到着色器输入或输出的字符串，用于传达有关参数的预期用途的信息。通俗地讲，这些语义可以让 Shader 知道从哪里读取数据，并把数据输出到哪里。
+
+#### 系统数值
+
+在 DirectX 10 以后，有一种新的语义类型，就是**系统数值语义 (system-value semantics)**。这类语义是以 `SV` 开头的，`SV` 代表的含义就是**系统数值 (system-value)**。这些语义在渲染流水线中有特殊的含义。为了让 Shader 有更好的跨平台性，对于这些有特殊含义的变量最好使用以 `SV` 开头的语义进行修饰。
+
+#### Unity 支持的语义
+
+***从应用阶段传递模型数据给顶点着色器时Unity支持的常用语义***
+
+| 语义 | 描述 |
+| ---- | --- |
+| POSITION | 模型空间中的项点位置，通常是 float4 类型 |
+| NORMAL  | 顶点法线，通常是 float3 类型 |
+| TANGENT  | 顶点切线，通常是 float4 类型 |
+| TEXCOORDn | 顶点的纹理坐标，TEXCOORDO 表示第 n 组纹理坐标，通常是 float2 或 float4 类型(n 的数目和 Shader Model 有关) |
+| COLOR  | 顶点颜色，通常是 fixed4 或 float4 类型 |
+
+***从顶点着色器传递数据给片元着色器时Unity使用的常用语义***
+
+| 语义 | 描述 |
+| ---- | --- |
+| SV_POSITION | 裁切空间中的顶点坐标，结构体中必须包含一个用于该语义修饰的变量。等同于 DirectX9 中的 POSITION，但最好使用 SV_POSITION |
+| COLOR0 | 通常用于输出第 组顶点颜色．但不是必需的 |
+| COLOR1 | 通常用于输出第二组顶点颜色，但不是必需的 |
+| TEXCOORD0~TEXCOORD7 | 通常用于输出纹理坐标，但不是必需的 |
+
+通常，如果我们需要把一些自定义的数据从顶点着色器传递给片元着色器，一般选用TEXCOORD0
+
+***片元着色器输出时Unity支持的常用语义***
+
+| 语义 | 描述 |
+| ---- | --- |
+| SV_Target  | 输出值将会存储到渲染目标 (render target) 中。等同于 DirectX9 中的 COLOR 语义，但最好使用SV_Target |

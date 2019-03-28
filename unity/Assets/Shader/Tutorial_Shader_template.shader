@@ -31,6 +31,7 @@
 				// 这样，我们就可以使用Unity给定的数据，并把数据返回到Unity中
 				#include "UnityCG.cginc"
 				
+				// Unity 支持的语义（semantic）有： POSITION, TANGENT , NORMAL, TEXCOORDO, TEXCOORDJ, TEXCOORD2, TEXCOORD3, COLOR 等。他们由材质的 Mesh Render 组件提供
 				// 我们可以传递一些自定义的数据格式如 `[type] [name] :[semantic]`
 				// 例如要求Unity获取模型对象的顶点坐标 `flot4 vertex:POSITION;`
 				struct a2v{

@@ -189,11 +189,20 @@ HLSL 程序片段是在 `CGPROGRAM` 和 `ENDCG`关键字之间编写的，或者
   - `HLSLSupport.cginc` （自动包含）跨平台着色器的编译提供程序宏与定义
   - `UnityShaderVariables.cginc` （自动包含）常用的全局变量
   - `UnityCG.cginc` 常用的辅助函数，通常包含在 Unity 着色器中
-  UnityCG.cginc 中的数据结构
+    UnityCG.cginc 中的数据结构
     - `appdata_base` 顶点着色器(vertex shader)输入位置，法线，一个纹理坐标
     - `appdata_tan` 顶点着色器(vertex shader)输入位置，法线，切线，一个纹理坐标
     - `appdata_full` 顶点着色器输入位置，法线，切线，顶点颜色和两个纹理坐标
     - `appdata_img` 顶点着色器输入位置和一个纹理坐标
+    - `v2f_img` 顶点着色器输出裁剪空间中的位置和一个纹理坐标
+    UnityCG.cginc 中的常用辅助函数
+    - `float3 WorldSpaceViewDir (float4 v)` 输入一个模型空间中的顶点位置，返回**世界空间**中从该点到摄像机的观察方向
+    - `float3 ObjSpaceViewDir (float4 v)` 输入一个模型空间中的顶点位置，返回**模型空间**中从该点到摄像机的观察方向
+    - `float3 WorldSpaceLightDir (float4 v)` 仅可用于前向渲染中。输入一个模型空间中的顶点位置，返回**世界空间**中从该点到光源的光照方向。没有被归一化。
+    - `float3 ObjSpaceViewDir (float4 v)` 仅可用于前向渲染中。输入一个模型空间中的顶点位置，返回**模型空间**中从该点到光源的光照方向。没有被归一化。
+    - `float3 UnityObjectToWorldNormal (float3 norm)` 把法线方向从模型空间转换到世界空间中
+    - `float3 UnityObjectToWorldDir (in float3 dir)` 把方向矢量从模型空间变换到世界空间中
+    - `float3 UnityWorldToObjeclDir(float3 dir)` 把方向矢量从世界空间变换到模型空间中
   - `AutoLight.cginc` 照明和阴影功能，表面着色器在内部使用此文件
   - `Lighting.cginc` 标准表面着色器照明模型，编写表面着色器时自动包含
   - `TerrainEngine.cginc` 地形(Terrain)和植被着色器辅助函数
