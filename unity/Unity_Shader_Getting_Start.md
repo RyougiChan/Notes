@@ -107,7 +107,7 @@ GPU 渲染的过程就是 GPU 流水线。几何阶段和光栅化阶段可以�
     一个可选的着色器，*完全可编程*，它可以被用于执行逐图元(Per-Primitive) 的着色操作，或者被用于产生更多的图元。
   - 裁剪(Clipping)：
     这一阶段的目的是将那些不在摄像机视野内的顶点裁剪掉，并剔除某些三角图元的面片。这个阶段是*可配置*的(自定义一个裁剪操作)。
-    一个图元和摄像机视野的关系有3种： 完全在视野内、部分在视野内、完全在视野外。完全在视野内的图元就继续传递给下一个流水线阶段， 完全在视野外的图元不会继续向下传递，因为它们不需要被渲染。而那些部分在视野内的图元需要进行一个处理，这就是裁剪。
+    一个图元和摄像机视野的关系有3种： 完全在视野内、部分在视野内、完全在视野外。完全在视野内的图元就继续传递给下一个流水线阶段，完全在视野外的图元不会继续向下传递，因为它们不需要被渲染。而那些部分在视野内的图元需要进行一个处理，这就是裁剪。
     ![只有在单位立方体的图元才需要被继续处理。](http://static.zybuluo.com/candycat/08cvo0uahel9ygds4xkwrczp/Clipping.png)
   - 屏幕映射(Screen Mapping)：
     这一阶段是*不可配置和编程*的，它负责把每个图元的坐标转换到屏幕坐标系中。
@@ -160,7 +160,7 @@ GPU 渲染的过程就是 GPU 流水线。几何阶段和光栅化阶段可以�
 
 ### Unity Shader 的基础：Shadarlab
 
-在 Unity 中，所有的 Unity Shader 都是使用 ShaderLab 来编写的。 ShaderLab 是 Unity 提供的编写 Unity Shader 的一种说明性语言。
+在 Unity 中，所有的 Unity Shader 都是使用 ShaderLab 来编写的。ShaderLab 是 Unity 提供的编写 Unity Shader 的一种说明性语言。
 
 ### Unity Shader 的结构
 
@@ -197,7 +197,7 @@ SubShader 中定义了一系列 Pass 以及可选的状态([RenderSetup])和标�
 ```cs
 Pass {
   /*
-   * 在 Pass 中定义该 Pass 的名称，通过这个名称， 我们可以使用 ShaderLab 的 UsePass 命令来直接使用其他 Unity Shader 中的 Pass。如：
+   * 在 Pass 中定义该 Pass 的名称，通过这个名称，我们可以使用 ShaderLab 的 UsePass 命令来直接使用其他 Unity Shader 中的 Pass。如：
    * `UsePass "MyShader/MYPASSNAME"`
    * ！！！需要注意：由于 Unity 内部会把所有 Pass 的名称转换成大写字母的表示，因此，在使用 UsePass 命令时必须使用大写形式的名字。
    */
@@ -240,7 +240,7 @@ SubShader 的标签(`Tags`)是一个键值对 (Key/Value Pair), 它的键和值�
 | -------  | --- | ---  |
 | Queue    | 控制渲染顺序，指定该物体属于哪一个渲染队列，通过这种方式可以保证所有的透明物体可以在所有不透明物体后而被渲染，我们也可以自定义使用的渲染队列来控制物体的渲染顺序 | `Tags { "Queue" = "Transparent" }` |
 | RenderType | 对着色器进行分类，例如这是一个不透明的着色器，或是一个透明的着色器等。这可以被用于着色器替换(Shader Replacement)功能 | `Tags { "RenderType" = "Opaque" }` |
-| DisableBatching  | 一些 SubShader 在使用 Unity 的批处理功能时会出现问题， 例如使用了模型空间下的坐标进行顶点动画。这时可以通过该标签来直接指明是否对该SubShader 使用批处理 | `Tags { "DisableBatching" = "True"` |
+| DisableBatching  | 一些 SubShader 在使用 Unity 的批处理功能时会出现问题，例如使用了模型空间下的坐标进行顶点动画。这时可以通过该标签来直接指明是否对该SubShader 使用批处理 | `Tags { "DisableBatching" = "True"` |
 | ForceNoShadowCasting  | 控制使用该 SubShader 的物体是否会投射阴影 | `Tags { "ForceNoShadowCasting" = "True" }` |
 | lgnoreProjeclor | 如果该标签值为 `"True"`, 那么使用该 SubShader 的物体将不会受 Projector 的影响。通常用于半透明物体 | `Tags { "JgnoreProjector" = "True" }` |
 | CanUseSpriteAtlas  | 当该 SubShader 是用于精灵(sprites)时，将该标签设为`"False"` | `Tags { "CanUseSpriteAtlas" = "False")` |
@@ -250,7 +250,7 @@ SubShader 的标签(`Tags`)是一个键值对 (Key/Value Pair), 它的键和值�
 | 标签类型  | 说明 | 例子 |
 | -------  | --- | ---  |
 | LightMode    | 定义该 Pass 在 Unity 的渲染流水线中的角色 | `Tags { "LightMode" = "ForwardBase" }` |
-| RequireOptions    | 指定当满足某些条件时才渲染该 Pass, 它的值是一个由空格分隔的字符串。目前，Unity5 支持的选项有：`Soft Vegetation`。在后面的版本中， 可能会增加更多的选项 | `Tags { "RequireOptions" = "Soft Vegetation" }` |
+| RequireOptions    | 指定当满足某些条件时才渲染该 Pass, 它的值是一个由空格分隔的字符串。目前，Unity5 支持的选项有：`Soft Vegetation`。在后面的版本中，可能会增加更多的选项 | `Tags { "RequireOptions" = "Soft Vegetation" }` |
 
 #### Fallback
 
@@ -542,7 +542,7 @@ Shader "Tutorial/Basic" {
 
   图形学中的线性变换：
   - **缩放(scale)**，eg. `f(x)=2x`
-  - **旋转(rotation)**，对于线性变换来说，如果我们要对一个三维的矢量进行变换， 那么仅仅使用 `3x3` 的矩阵就可以表示所有的线性变换。
+  - **旋转(rotation)**，对于线性变换来说，如果我们要对一个三维的矢量进行变换，那么仅仅使用 `3x3` 的矩阵就可以表示所有的线性变换。
   - 错切(shear)
   - 镜像(mirroring/reflection)
   - 正交投影(orthographic projection)
@@ -833,7 +833,7 @@ M(view) =  ⎢ 0  0  -1  0 ⎥⎢ 0  1   kz  0 ⎥⎢ 0   0   0   0 ⎥⎢ 0  0 
 
   进行标准**齐次除法(homogeneousdivision)**，也被称为透视除法(perspective division)，用齐次坐标系的 `w` 分量去除以x、y、z分量。在 OpenGL 中，这一步得到的坐标叫做**归一化的设备坐标(Normalized Device Coordinates, NDC)**。
   
-  经过这一步，我们可以把坐标从齐次裁剪坐标空间转换到 NDC 中。经过透视投影变换后的裁剪空间，经过齐次除法后会变换到一个立方体内。按照 OpenGL 的传统，这个立方体的x、y、z分扭的范围都是[-1,1]。 但在 DirectX 这样的 API 中，z 分量的范围会是[0,1]。而 Unity 选择了 OpenGL 这样的齐次裁剪空间。
+  经过这一步，我们可以把坐标从齐次裁剪坐标空间转换到 NDC 中。经过透视投影变换后的裁剪空间，经过齐次除法后会变换到一个立方体内。按照 OpenGL 的传统，这个立方体的x、y、z分扭的范围都是[-1,1]。但在 DirectX 这样的 API 中，z 分量的范围会是[0,1]。而 Unity 选择了 OpenGL 这样的齐次裁剪空间。
 
   ![经过齐次除法后，透视投影的裁剪空间会变换到一个立方体 ](http://static.zybuluo.com/candycat/7ozeba0c8nex3o4zr9z9nt4v/projection_matrix1.png)
 
@@ -931,7 +931,7 @@ float4 modelPos : mul(viewPos, UNITY_MATRIX_IT_MV);
 | `_ProjectionParams` | float4 | `x = 1.0` (或-1.0，如果正在使用一个翻转的投影矩阵进行渲染)，`y = Near`，`z = Far`，`w = 1.0+1.0/Far`，其中 Near 和 Far 分别是近裁切平面和远裁切平面和摄像机的距离 |
 | `_ScreenParams` | float4 | `x = width`, `y = height`, `z = 1.0 + 1.0/width`, `w = 1.0 + 1.0/height`, 其中 width 和 height 分别是该摄像机的渲染目标 (render target) 的像素宽度和高度 |
 | `_ZBufferParams` | float4 | `x = 1- Far/Near`, `y= Far/Near`, `z = x/Far`, `w = y/Far`, 该变量用于线性化 Z 缓存中的深度值 |
-| `unity_OrthoParams`  | float4 | `x = width`, `y = height`, z 没有定义， `w = 1.0` (该摄像机是正交摄像机）或 `w = 0.0` (该摄像机是透视摄像机），其中 width 和 height 是正交投影摄像机的宽度和高度 |
+| `unity_OrthoParams`  | float4 | `x = width`, `y = height`, z 没有定义，`w = 1.0` (该摄像机是正交摄像机）或 `w = 0.0` (该摄像机是透视摄像机），其中 width 和 height 是正交投影摄像机的宽度和高度 |
 | `unity_CameraProjection`  | float4x4 | 该摄像机的投影矩阵 |
 | `unity_CameraInvProjection`  | float4x4 | 该摄像机的投影矩阵的逆矩阵 |
 | `unity_CameraWorldClipPlanes[6]`  | float4 | 该摄像机的6个裁剪平面在世界空间下的等式，按如下顺序：左、右、 下、上、近、远裁剪平面 |
@@ -1024,7 +1024,7 @@ Shader "Unity Shaders Book/Chapter 5/Simple Shader" {
 }
 ```
 
-材质提供给我们一个可以方便地调节 Unity Shader 中参数的方式，通过这些参数， 我们可以随时调整材质的效果。而这些参数就需要写在 `Properties` 语义块中。
+材质提供给我们一个可以方便地调节 Unity Shader 中参数的方式，通过这些参数，我们可以随时调整材质的效果。而这些参数就需要写在 `Properties` 语义块中。
 
 ```cs
 // ...
@@ -1049,11 +1049,11 @@ float _ExtrudeAmount;
 
 | Shaderlab属性类型 | CG变量类型 |
 | ---------------- | --------- |
-| Color, Vector  | float4, half4, fixed4 |
-| Range, Float  | float, half, fixed |
-| 2D | sampler2D |
-| Cube | samplerCube |
-| 3D | sampler3D |
+| `Color, Vector`  | float4, half4, fixed4 |
+| `Range, Float`  | float, half, fixed |
+| `2D` | sampler2D |
+| `Cube` | samplerCube |
+| `3D` | sampler3D |
 
 ### Unity 内置文件和变量
 
@@ -1075,25 +1075,105 @@ Unity 内置文件和变量 [ここてまる](Unity_Docs.md#HLSL%20片段)
 
 | 语义 | 描述 |
 | ---- | --- |
-| POSITION | 模型空间中的项点位置，通常是 float4 类型 |
-| NORMAL  | 顶点法线，通常是 float3 类型 |
-| TANGENT  | 顶点切线，通常是 float4 类型 |
-| TEXCOORDn | 顶点的纹理坐标，TEXCOORDO 表示第 n 组纹理坐标，通常是 float2 或 float4 类型(n 的数目和 Shader Model 有关) |
-| COLOR  | 顶点颜色，通常是 fixed4 或 float4 类型 |
+| `POSITION` | 模型空间中的项点位置，通常是 float4 类型 |
+| `NORMAL`  | 顶点法线，通常是 float3 类型 |
+| `TANGENT`  | 顶点切线，通常是 float4 类型 |
+| `TEXCOORDn` | 顶点的纹理坐标，`TEXCOORDn` 表示第 n 组纹理坐标，通常是 float2 或 float4 类型(n 的数目和 Shader Model 有关) |
+| `COLOR`  | 顶点颜色，通常是 fixed4 或 float4 类型 |
 
 ***从顶点着色器传递数据给片元着色器时Unity使用的常用语义***
 
 | 语义 | 描述 |
 | ---- | --- |
-| SV_POSITION | 裁切空间中的顶点坐标，结构体中必须包含一个用于该语义修饰的变量。等同于 DirectX9 中的 POSITION，但最好使用 SV_POSITION |
-| COLOR0 | 通常用于输出第 组顶点颜色．但不是必需的 |
-| COLOR1 | 通常用于输出第二组顶点颜色，但不是必需的 |
-| TEXCOORD0~TEXCOORD7 | 通常用于输出纹理坐标，但不是必需的 |
+| `SV_POSITION` | 裁切空间中的顶点坐标，结构体中必须包含一个用于该语义修饰的变量。等同于 DirectX9 中的 `POSITION`，但最好使用 `SV_POSITION` |
+| `COLOR0` | 通常用于输出第一组顶点颜色．但不是必需的 |
+| `COLOR1` | 通常用于输出第二组顶点颜色，但不是必需的 |
+| `TEXCOORD0~TEXCOORD7` | 通常用于输出纹理坐标，但不是必需的 |
 
-通常，如果我们需要把一些自定义的数据从顶点着色器传递给片元着色器，一般选用TEXCOORD0
+通常，如果我们需要把一些自定义的数据从顶点着色器传递给片元着色器，一般选用`TEXCOORD0`
 
 ***片元着色器输出时Unity支持的常用语义***
 
 | 语义 | 描述 |
 | ---- | --- |
-| SV_Target  | 输出值将会存储到渲染目标 (render target) 中。等同于 DirectX9 中的 COLOR 语义，但最好使用SV_Target |
+| `SV_Target`  | 输出值将会存储到渲染目标 (render target) 中。等同于 DirectX9 中的 `COLOR` 语义，但最好使用 `SV_Target` |
+
+ps: 应该尽可能使用下面的语义来描述Shader的输入输出变量。
+
+- 使用 `SV_POSITION` 来描述顶点着色器输出的顶点位置。一些 Shader 使用了 `POSITION` 语义，但这些 Shader 无法在索尼 PS4 平台上或使用了细分着色器的情况下正常工作。
+- 使用 `SV_Target` 来描述片元着色器的输出颜色。一些 Shader 使用了 `COLOR` 或者 `COLOR0` 语义，同样的，这些 Shader 无法在索尼 PS4 上正常工作。
+
+#### 复杂变量类型定义
+
+一个语义可以使用的寄存器只能处理 4 个浮点值(float)。因此，如果我们想要定义矩阵类型，如float3x4、float4x4 等变弑就需要使用更多的空间。一种方法是，把这些变量拆分成多个变量，例如对于 float4x4 的矩阵类型，我们可以拆分成 4 个float4 类型的变量，每个变量存储了矩阵中的一行数据。
+
+### 渲染平台的差异
+
+#### 渲染纹理的坐标差异
+
+- OpenGL 和 DirectX 的屏幕空间坐标的差异：
+  
+  在水平方向上，两者的数值变化方向是相同的，但在竖直方向上，两者是相反的。在 OpenGL (OpenGL ES 也是)中，`(0, 0)` 点对应了屏幕的左下角，而在 DirectX (Metal 也是）中，`(0, 0)` 点对应了左上角。
+
+  ![OpenGL和DirectX使用了不同的屏幕空间坐标](http://static.zybuluo.com/candycat/ninmtxykcrk7oywzvxirhn04/2d_cartesian_opengl_directx.png)
+
+- 使用渲染纹理 (Render Texture) 时：
+
+  把渲染结果输出到不同的渲染目标 (Render Target) 中时，需要使用渲染纹理来保存这些渲染结果。如果不采取行任何措施的话，就会出现纹理翻转的情况。然而，Unity 在背后会为我们**自动**处理这种翻转问题。
+  
+  有一种特殊情况 Unity 不会进行这个翻转操作，这种情况就是我们开启了抗锯齿。
+  - 如果屏幕特效只需要处理**一张**渲染图像，不需要在意纹理的翻转问题，这是因为在我们调用 `Graphics.Blit` 函数时，Unity 已经为我们对屏幕图像的采样坐标进行了处理，我们只需要按正常的采样过程处理屏幕图像即可。
+  - 如果屏幕特效只需要处理**多张**渲染图像，这些图像在竖直方向的朝向可能不同（仅 DirectX 才会有此问题），此时需要自行处理：
+
+  ```cs
+  #if UNITY_UV_STARTS_AT_TOP // 判断当前平台是否是 DirectX 类型的平台
+  if(_MainTex_TexelSize.y < 0) // 开启了抗锯齿后，主纹理的纹素大小在竖直方向上会变成负值，_MainTex_TexelSize.y < 0 来检验是否开启了抗锯齿
+  {
+    ux.y = 1 - uv.y; // 对除主纹理外的其他纹理的采样坐标进行竖直方向上的翻转
+  }
+  #endif
+  ```
+
+  ps: 类似噪声纹理的装饰性纹理，它们在竖直方向上的朝向并不是很重要，即便翻转了效果往往也是正确的，因此我们可以不对这些纹理进行平台差异化处理。
+
+### Shader 代码规范
+
+#### float, half, fixed
+
+`float, half, fixed` 是 CG/HLSL 中的 3 种精度的数值类型，这些精度将决定计算结果的数值范围。
+
+***CG/HLSL 中的 3 种精度的数值类型（精度范围并不是绝对正确）***
+
+| 类型 | 精度 |
+| ---- | --- |
+| `float` | 最高精度的浮点值。通产用 32 位存储 |
+| `half`  | 中等精度的浮点值。通产用 16 位存储，精度范围 -60000~+60000 |
+| `fixed` | 最低精度的浮点值。通产用 11 位存储，精度范围 -2.0~+2.0 |
+
+ps: 尽可能使用精度较低的类型，因为这可以优化 Shader 的性能，这一点在移动平台上尤其重要。从它们大体的值域范围来看，我们可以使用 `fixed` 类型来存储颜色和单位矢量，如果要存储更大范围的数据可以选择 `half` 类型，最差情况下再选择使用 `float`。
+
+#### 避免不必要的计算
+
+过多的运算可能导致需要的临时寄存器数目或指令数目超过了当前可支持的数目而引发异常。通常，我们可以通过指定更高等级的 Shader Target 来消除这些错误。但一个更好的方法是尽可能减少Shader中的运算，或者通过预计算的方式来提供更多的数据。
+
+***Unity支持的Shader Target***
+
+| 指令 | 描述 |
+| --- | ---- |
+| #pragma target 2.0 | 默认的 Shader Target 等级。相当于 Direct3D 9 上的 Shader Model 2.0  |
+| #pragma target 3.0 | 相当于 Direct3D 9 上的 Shader Model 3.0  |
+| #pragma target 4.0 | 相当于 Direct3D 10 上的 Shader Model 4.0。目前只在 DirectX ll 和 Xbox0ne/PS4 平台上提供了支持 |
+| #pragma target 5.0 | 相当于 Direct3D 11 上的 Shader Model 5.0。目前只在 DirectX 11 和 Xbox0ne/PS4 平台上提供了 支持 |
+
+ps: 所有类似 OpenGL 的平台（包括移动平台）被当成是支持到 Shader Model 3.0 的。而 WP8/WinRT 平台则只支持到 Shader Model 2.0。
+
+#### 慎用分支和循环语句
+
+- 分支语句
+  GPU 使用了不同于 CPU 的技术来实现分支语句。在最坏的情况下，花在一个分支语句的时间相当于运行了所有分支语句的时间。这样会降低 GPU 的并行处理操作。
+- 流程控制语句
+  在 Shader 中使用大量的流程控制语句时，这个 Shader 的性能可能会成倍下降。一个解决方法是：该尽量把计算向流水线上端移动。例如把放在片元着色器中的计算放到顶点着色器中。或者直接在 CPU 中进行预计算。再把结果传递给 Shader。当无法避免使用分支语句进行计算时：
+  - 分支判断语句中使用的条件变量最好是常数，即在Shader运行过程中不会发生变化
+  - 每个分支中包含的操作指令数尽可能少
+  - 分支的嵌套层数尽可能少。
+  

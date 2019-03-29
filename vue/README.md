@@ -957,3 +957,4 @@ vm.userProfile = Object.assign({}, vm.userProfile, {
 - 按键修饰符: `.enter`、`.tab`、`.delete`、`.esc`、`.space`、`.up`、`.down`、`.left`、`.right`
 - 系统按键修饰符: `.ctrl`、`.alt`、`.shift`、`.meta(⌘|⊞|◆)`、`.exact` (允许精确控制系统修饰符组合键触发)
 - 鼠标修饰符： `.left`、`.right`、`.middle`
+
