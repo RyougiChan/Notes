@@ -1177,3 +1177,205 @@ ps: 所有类似 OpenGL 的平台（包括移动平台）被当成是支持到 S
   - 每个分支中包含的操作指令数尽可能少
   - 分支的嵌套层数尽可能少。
   
+## Unity的基础光照
+
+### 一些光学概念
+
+- 辐照度(irradiance)
+
+  量化光的指标，是在某一指定表面上单位面积上所接受的辐射能量。单位：瓦特/平方米。
+
+- 散射(scattering)和吸收(absorption)
+
+  光线在物体表面经过散射后，有两种方向：一种将会散射到物体内部，这种现象被称为**折射(refraction)**或**透射(transmission)**; 另一种将会散射到外部，这种现象被称为**反射(reflection)**。对千不透明物体，折射进入物体内部的光线还会继续与内部的颗粒进行相交，其中一些光线最后会重新发射出物体表面，而另一些则被物体**吸收**。那些从物体表面重新发射出的光线将具有和入射光线不同的方向分布和颜色。
+
+  ![散射时，光线会发生折射和反射现象。对于不透明物体，折射的光线会在物体内部继续传播，最终有一部分光线会重新从物体表面被发射出去](http://static.zybuluo.com/candycat/7gu6p5xdmzngz53iaa011joy/scattering.png)
+
+  在光照模型中，**高光反射(specular)** 部分表示物体表面是如何反射光线的，而**漫反射(diffuse)** 部分则表示有多少光线会被折射、 吸收和散射出表面。
+
+- 着色(shading)
+
+  根据材质属性（如漫反射屈性等）、光源信息（如光源方向、辐照度等），使用一个等式去计算沿某个观察方向的出射度的过程。这个等式成为**光照模型(Lighting Model)**。
+
+### 标准光照模型
+
+#### 标准光照模型的四部分
+
+标准光照模型只关心直接光照（direct light）。它把进入摄像机的光照分为4个部分，每个部分使用一种方法来计算它的贡献度。
+
+- **自发光（emissive）**，这部分用于给定一个方向时，物体表面会向这个方向产生多少的光（辐射量），当没有使用全局光照时，自发光物体不会照亮周围物体，只是本身看起来更亮而已。
+
+  计算自发光非常简单，只需要在片元着色器输出最后的颜色之前，把材质的自发光颜色添加到输出颜色上即可。
+- **高光反射（specular）**，这个部分用于描述当光线从光源照到物体表面时，物体镜面反射产生的光。
+
+  计算高光反射需要知道**表面法线、视角方向、光源方向、反射方向**，其中反射方向可以通过其他三个向量计算得到。
+
+  ```cs
+  // 计算反射方向 r
+  r = 2 (N·I)N - I
+
+  // 利用 Phong 模型来计算高光反射
+  // c(light) 是光源颜色和强度
+  // m(gloss) 是材质的光泽度(gloss), 也被称为反光度(shininess)
+  // V 是视角方向(View)
+  // m(specular)是材质的高光反射颜色(Material Spscular)，用于控制该材质对于高光反射的强度和颜色
+  c(specular) = [c(light)·m(specular)]max(0,V·r)^m(gloss)
+
+  // 利用 Blinn 模型来计算高光反射(避免计算反射方向 r)
+  // 引入新矢量 h
+  h = (V+I) / |V+I|
+  c(specular) = [c(light)·m(specular)]max(0,V·h)^m(gloss)
+  ```
+
+- **漫反射（diffuse）**，这个部分是光线从光源照到物体表面时，物体向各个方向产生的光。
+
+  漫反射光照符合**兰伯特定律(Lambert's law)**: 反射光线的强度与表面法线和光源方向之间夹角的余弦值成正比。
+
+  ```cs
+  // 计算漫反射
+  // n 是表面法线，I 是指向光源的单位矢量
+  // m(diffuse) 是材质的漫反射颜色，c(light) 是光源颜色和强度
+  c(diffuse) = [c(light)·m(diffuse)]max(O,n · I)
+  ```
+
+- **环境光（ambient）**，这个部分用来描述其他间接的光。
+
+  在标准光照模型中，我们使用了一种被称为环境光的部分来近似模拟间接光照。环境光的计算非常简单，它通常是一个全局变量，即场景中的所有物休都使用这个环境光。通常在实时渲染中，自发光的表面往往并不会照亮周围的表面，也就是说，这个物体并不会被当成一个光源。
+
+  ```cs
+  // 计算环境光
+  c(ambient) = g(ambient)
+  ```
+
+#### 光照模型计算着色器
+
+- **片元着色器**：也叫**逐像素光照（per-pixel lighting）**。一般以每个像素为基础，得到它的法线（可以是对顶点法线插值得到，也可以从纹理法线中采样得到），然后进行光照模型计算。这种在面片之间对顶点法线进行插值的技术被称为**Phong着色(Phong shading)**, 也被称为**Phong插值**或**法线插值**着色技术
+- **顶点着色器**：也叫**逐顶点光照（per-vertex lighting）**。是在每个顶点上计算光照，然后在渲染图元内部进行线性插值，最后输出成像素颜色。**高洛德着色(Gouraud shading)**。
+
+由于顶点数目远小于像素数目，因此逐顶点光照的计算量要小于逐像素光照。但是，由于逐顶点光照依赖于线性插值来得到像素光照，所以当光照模型中有非线性的计算时（计算高光反射），逐顶点就会出问题。而且由于逐顶点光照会在渲染图元内部对顶点颜色进行插值，会导致渲染图元内部颜色总是暗于顶点处的最高颜色值，这在某些情况下会产生明显的棱角现象。
+
+### Unity Shader中实现漫反射光照模型
+
+基本光照模型中漫反射部分的计算公式：`c(diffuse) = [c(light)·m(diffuse)]max(0 ,n · I)`
+
+#### 实现逐顶点光照
+
+```cs
+Shader "Unity Shaders Book/Chapter 6/Diffuse Vertex-Level" {
+  Properties {
+    _Diffuse ("Diffuse", Color) = (1,1,1,1)
+  }
+
+  SubShader {
+    Pass {
+      Tags { "LightMode" = "ForwardBase" }
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+
+      fixed4 _Diffuse;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        fixed3 color : COLOR;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        // 顶点着色器最基本的任务: 把顶点位置从模型空间转换到裁剪空间中
+        o.pos = UnityObjectToClipPos(v.vertex);
+        // 得到了环境光部分
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+        // 得到光源方向(这里对光源方向的计算并不具有通用性)
+        fixed3 worldLight = normalize(_WorldSpaceLightPos0.xyz);
+        // 把法线转换到世界空间(这里使用顶点变换矩阵的逆转置矩阵对法线进行相同的变换)并归一化
+        // 法线是一个三维矢量，所以只需要截取 _World2Object 的前三行前三列
+        fixed3 worldNormal = normalize(mul(v.normal, (float3x3)unity_WorldToObject));
+        // 得到最终的漫反射光照部分
+        // saturate函数可以把参数截取到[0, 1]的范围内
+        fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(worldNormal, worldLight));
+        o.color = ambient + diffuse;
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        return fixed4(i.color, 1.0);
+      }
+
+      ENDCG
+    }
+  }
+  Fallback "Diffuse"
+}
+```
+
+#### 实现逐像素光照
+
+```cs
+Shader "Unlit/Chapter6-DiffusePixelLevelMat"
+{
+  Properties {
+    _Diffuse ("Diffuse", Color) = (1,1,1,1)
+  }
+
+  SubShader {
+    Pass {
+      Tags { "LightMode" = "ForwardBase" }
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+
+      fixed4 _Diffuse;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldNormal : TEXCOORD0;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        // 顶点着色器最基本的任务: 把顶点位置从模型空间转换到裁剪空间中
+        o.pos = UnityObjectToClipPos(v.vertex);
+        // 把世界空间下的法线传递给片元着色器
+        o.worldNormal = mul(v.normal, (float3x3)unity_WorldToObject);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz; 
+        fixed3 worldNormal = normalize(i.worldNormal);
+        fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz);
+        fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(worldNormal,worldLightDir));
+        fixed3 color = ambient + diffuse;
+        return fixed4(color, 1.0);
+      }
+
+      ENDCG
+    }
+  }
+  Fallback "Diffuse"
+}
+
+```
+
+### 半兰伯特(HalfLambert)光照模型
+
+半兰伯特是没有任何物理依据的，它仅仅是一个视觉加强技术。
+
+广义的半兰伯特光照模型的公式: `c(diffuse) = [c(light)·m(diffuse)](α(n · I)+β)`(绝大多数情况下，α，β值均为 0.5)
