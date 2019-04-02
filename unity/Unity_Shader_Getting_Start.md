@@ -1218,7 +1218,7 @@ ps: 所有类似 OpenGL 的平台（包括移动平台）被当成是支持到 S
   // c(light) 是光源颜色和强度
   // m(gloss) 是材质的光泽度(gloss), 也被称为反光度(shininess)
   // V 是视角方向(View)
-  // m(specular)是材质的高光反射颜色(Material Spscular)，用于控制该材质对于高光反射的强度和颜色
+  // m(specular)是材质的高光反射系数(Material Specular)，用于控制该材质对于高光反射的强度和颜色
   c(specular) = [c(light)·m(specular)]max(0,V·r)^m(gloss)
 
   // 利用 Blinn 模型来计算高光反射(避免计算反射方向 r)
@@ -1247,6 +1247,17 @@ ps: 所有类似 OpenGL 的平台（包括移动平台）被当成是支持到 S
   c(ambient) = g(ambient)
   ```
 
+#### 半兰伯特(HalfLambert)光照模型
+
+半兰伯特是没有任何物理依据的，它仅仅是一个视觉加强技术。
+
+广义的半兰伯特光照模型的公式：
+
+```cs
+// (绝大多数情况下，α，β值均为 0.5)
+c(diffuse) = [c(light)·m(diffuse)](α(n · I)+β)
+```
+
 #### 光照模型计算着色器
 
 - **片元着色器**：也叫**逐像素光照（per-pixel lighting）**。一般以每个像素为基础，得到它的法线（可以是对顶点法线插值得到，也可以从纹理法线中采样得到），然后进行光照模型计算。这种在面片之间对顶点法线进行插值的技术被称为**Phong着色(Phong shading)**, 也被称为**Phong插值**或**法线插值**着色技术
@@ -1254,7 +1265,7 @@ ps: 所有类似 OpenGL 的平台（包括移动平台）被当成是支持到 S
 
 由于顶点数目远小于像素数目，因此逐顶点光照的计算量要小于逐像素光照。但是，由于逐顶点光照依赖于线性插值来得到像素光照，所以当光照模型中有非线性的计算时（计算高光反射），逐顶点就会出问题。而且由于逐顶点光照会在渲染图元内部对顶点颜色进行插值，会导致渲染图元内部颜色总是暗于顶点处的最高颜色值，这在某些情况下会产生明显的棱角现象。
 
-### Unity Shader中实现漫反射光照模型
+### Unity Shader 中实现漫反射光照模型
 
 基本光照模型中漫反射部分的计算公式：`c(diffuse) = [c(light)·m(diffuse)]max(0 ,n · I)`
 
@@ -1358,7 +1369,7 @@ Shader "Unlit/Chapter6-DiffusePixelLevelMat"
       }
 
       fixed4 frag(v2f i) : SV_Target {
-        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz; 
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
         fixed3 worldNormal = normalize(i.worldNormal);
         fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz);
         fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(worldNormal,worldLightDir));
@@ -1374,8 +1385,167 @@ Shader "Unlit/Chapter6-DiffusePixelLevelMat"
 
 ```
 
-### 半兰伯特(HalfLambert)光照模型
+### Unity Shader 中实现高光反射光照模型
 
-半兰伯特是没有任何物理依据的，它仅仅是一个视觉加强技术。
+基本光照模型中高光反射部分的计算公式：
 
-广义的半兰伯特光照模型的公式: `c(diffuse) = [c(light)·m(diffuse)](α(n · I)+β)`(绝大多数情况下，α，β值均为 0.5)
+```cs
+r = 2 (N·I)N - I
+c(specular) = [c(light)·m(specular)]max(0,V·r)^m(gloss)
+
+// or
+// Blinn-Phong 光照模型
+h = (V+I) / |V+I|
+c(specular) = [c(light)·m(specular)]max(0,V·h)^m(gloss)
+```
+
+#### 逐顶点光照
+
+使用逐顶点的方法得到的高光效果有比较大的问题，高光部分明显不平滑。这主要是因为，高光反射部分的计算是非线性的，而在顶点着色器中计算光照再进行插值的过程是线性的，破坏了原计算的非线性关系，就会出现较大的视觉问题。
+
+```cs
+Shader "Unity Shader Book/Chapter 6/Specular Vertex-Level" {
+  Properties {
+    _Diffuse ("Diffuse", Color) = (1, 1, 1, 1)
+    // 控制高光反射颜色
+    _Specular ("Specular", Color) = (1, 1, 1, 1)
+    // 控制高光区域的大小
+    _Gloss ("Gloss", Range(8.0, 256)) = 20
+  }
+
+  SubShader {
+    Pass {
+      Tags { "LightMode" = "ForwardBase" }
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+
+      fixed4 _Diffuse;
+      fixed4 _Specular;
+      float _Gloss;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        fixed3 color : COLOR;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        // 计算漫反射部分
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+        fixed3 worldNormal = normalize(mul(v.normal, (float3x3)unity_WorldToObject));
+        fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz);
+        fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(worldNormal, worldLightDir));
+        // 计算高光反射部分
+        fixed3 reflectDir = normalize(reflect(-worldLightDir, worldNormal));
+        fixed3 viewDir = normalize(_WorldSpaceCameraPos.xyz - mul(unity_WorldToObject, v.vertex).xyz);
+        fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(saturate(dot(reflectDir, viewDir)), _Gloss);
+        o.color = ambient + diffuse + specular;
+
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        return fixed4(i.color, 1.0);
+      }
+      ENDCG
+    }
+  }
+
+  Fallback "Specular"
+}
+```
+
+#### 逐像素光照
+
+使用逐像素光照可以得到更加平滑的高光效果
+
+```cs
+Shader "Unity Shader Book/Chapter 6/Specular Vertex-Level" {
+  Properties {
+    _Diffuse ("Diffuse", Color) = (1, 1, 1, 1)
+    // 控制高光反射颜色
+    _Specular ("Specular", Color) = (1, 1, 1, 1)
+    // 控制高光区域的大小
+    _Gloss ("Gloss", Range(8.0, 256)) = 20
+  }
+
+  SubShader {
+    Pass {
+      Tags { "LightMode" = "ForwardBase" }
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+
+      fixed4 _Diffuse;
+      fixed4 _Specular;
+      float _Gloss;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldNormal : TEXCOORD0;
+        float3 worldPos : TEXCOORD1;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = mul(v.normal, (float3x3)unity_WorldToObject);
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        // 计算漫反射部分
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+        fixed3 worldNormal = normalize(i.worldNormal); 
+        fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz);
+        fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(worldNormal, worldLightDir));
+        // 计算高光反射部分
+        fixed3 reflectDir = normalize(reflect(-worldLightDir, worldNormal));
+        fixed3 viewDir = normalize(_WorldSpaceCameraPos.xyz - i.worldPos.xyz);
+        fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(saturate(dot(reflectDir, viewDir)), _Gloss);
+        return fixed4(ambient + diffuse + specular, 1.0);
+      }
+      ENDCG
+    }
+  }
+
+  Fallback "Specular"
+}
+```
+
+#### Blinn-Phong 光照模型
+
+```cs
+// 修改逐像素光照的 frag 函数计算高光反射部分
+fixed4 frag(v2f i) : SV_Target {
+    // ...
+    // 计算高光反射部分
+    fixed3 viewDir = normalize(_WorldSpaceCameraPos.xyz - i.worldPos.xyz);
+    fixed3 halfDir = normalize(worldLightDir + viewDir);
+    fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(saturate(dot(worldNormal, halfDir)), _Gloss);
+    return fixed4(ambient + diffuse + specular, 1.0);
+}
+```
+
+### 使用 Unity 内置函数
+
+[UnityCG.cginc中一些常用的帮助函数](Unity_Docs.md#HLSL%20片段)
