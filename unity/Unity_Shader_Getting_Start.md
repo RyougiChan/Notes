@@ -1549,3 +1549,98 @@ fixed4 frag(v2f i) : SV_Target {
 ### 使用 Unity 内置函数
 
 [UnityCG.cginc中一些常用的帮助函数](Unity_Docs.md#HLSL%20片段)
+
+## 基础纹理
+
+!!这里实现的 Shader 往往并不能直接应用到实际项目中!!
+
+### 单张纹理
+
+#### 纹理的属性
+
+![TextureImporter](https://docs.unity3d.com/Manual/class-TextureImporter.html)
+
+#### 单张纹理代替物体的漫反射颜色
+
+通常会使用一张纹理来代替物体的漫反射颜色
+
+```cs
+// 使用 Blinn-Phong 光照模型来计算光照
+Shader "Unity Shaders Book/Chapter 7/Single Texture" {
+  Properties {
+    _Color ("Color Tint", Color) = (1, 1, 1, 1)
+    _MainTex ("Main Tex", 2D) = "white" {}
+    _Specular ("Specular", Color) = (1, 1, 1, 1)
+    _Gloss ("Gloss", Range(8.0, 26)) = 20
+  }
+
+  SubShader {
+    Pass {
+      Tags { "LightMode" = "ForwardBase" }
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+
+      fixed4 _Color;
+      sampler2D _MainTex;
+      // 在Unity 中，我们需要使用 `纹理名_ST` 的方式来声明某个纹理的属性。
+      // ST 是缩放(scale) 和平移(translation) 的缩写。
+      // _MainTex_ST.xy 存储的是缩放值，_MainTex_ST.zw 存储的是偏移值。
+      float4 _MainTex_ST;
+      fixed4 _Specular;
+      float _Gloss;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+        // 将模型的第一组纹理坐标存储到该变量中
+        float4 texcoord : TEXCOORD0;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldNormal : TEXCOORD0;
+        float3 worldPos : TEXCOORD1;
+        // 存储纹理坐标以便在片元着色器中使用该坐标进行纹理采样
+        float2 uv : TEXCOORD2;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = UnityObjectToWorldNormal(v.normal);
+        // o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        o.worldPos = UnityObjectToWorldDir(v.vertex);
+        o.uv = v.texcoord.xy * _MainTex_ST.xy + _MainTex_ST.zw;
+        // o.uv = TRANSFORM_TEX(v.texcoord, _MainTex);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        fixed3 worldNormal = normalize(i.worldNormal);
+        fixed3 worldLightDir = normalize(UnityWorldSpaceLightDir(i.worldPos));
+
+        // 使用纹理进行采样
+        fixed3 albedo = tex2D(_MainTex, i.uv).rgb * _Color.rgb;
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz * albedo;
+        fixed3 diffuse = _LightColor0.rgb * albedo * saturate(dot(worldNormal, worldLightDir));
+
+        fixed3 viewDir = normalize(UnityWorldSpaceViewDir(i.worldPos));
+        fixed3 halfDir = normalize(worldLightDir + viewDir);
+        fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(saturate(dot(worldNormal, halfDir)), _Gloss);
+        return fixed4(ambient + diffuse + specular, 1.0);
+      }
+
+      ENDCG
+    }
+  }
+
+  FallBack "Specular"
+}
+```
+
+### 凹凸映射
+
