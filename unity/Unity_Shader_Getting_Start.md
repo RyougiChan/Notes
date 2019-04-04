@@ -1689,4 +1689,98 @@ Shader "Unity Shaders Book/Chapter 7/Single Texture" {
 
   基本思路是：在片元着色器中通过纹理采样得到切线空间下的法线，然后再与切线空间下的视角方向、光照方向等进行计算，得到最终的光照结果。
 
+  ```cs
+  Shader "Unity Shaders Book/Chapter 7/Normal Map In Tangent Space" {
+    Properties {
+      _Color ("Color Tint", Color) = (1,1,1,1)
+      _MainTex ("Main Tex", 2D) = "white" {}
+      // 法线纹理，"bump" 是 Unity 内置的法线纹理，当没有提供任何法线纹理时，"bump"就对应了模型自带的法线信息。
+      _BumpMap ("Normal Map", 2D) = "bump" {}
+      // _BumpScale 是用于控制凹凸程度的，当它为0时，意味着该法线纹理不会对光照产生任何影响。
+      _BumpScale ("Bump Scale", Float) = 1.0
+      _Specular ("Specular", Color) = (1,1,1,1)
+      _Gloss ("Gloass", Range(8.0, 256)) = 20
+    }
+
+    SubShader {
+      Pass {
+        Tags { "LightMode" = "ForwardBase" }
+
+        CGPROGRAM
+
+        #pragma vertex vert
+        #pragma fragment frag
+
+        #include "Lighting.cginc"
+
+        fixed4 _Color;
+        sampler2D _MainTex;
+        float4 _MainTex_ST;
+        sampler2D _BumpMap;
+        float4 _BumpMap_ST;
+        float _BumpScale;
+        fixed4 _Specular;
+        float _Gloss;
+
+        struct a2v {
+          float4 vertex : POSITION;
+          float3 normal : NORMAL;
+          // TANGENT 语义来描述 float4 类型的 tangent 变量，以告诉 Unity 把顶点的切线方向填充到tangent 变量中。
+          // tangent.w 分量用来决定切线空间中的第三个坐标轴一副切线的方向性
+          float4 tangent : TANGENT;
+          float4 texcoord : TEXCOORD0;
+        };
+
+        struct v2f {
+          float4 pos : SV_POSITION;
+          float4 uv : TEXCOORD0;
+          float3 lightDir : TEXCOORD1;
+          float3 viewDir : TEXCOORD2;
+        };
+
+        v2f vert(a2v v) {
+          v2f o;
+
+          o.pos = UnityObjectToClipPos(v.vertex);
+          // xy 分量存储 _MainTex 的纹理坐标
+          o.uv.xy = v.texcoord.xy * _MainTex_ST.xy + _MainTex_ST.zw;
+          // zw 分量存储 _BumpMap 的纹理坐标
+          o.uv.zw = v.texcoord.xy * _BumpMap_ST.xy + _BumpMap_ST.zw;
+
+          TANGENT_SPACE_ROTATION;
+
+          o.lightDir = mul(rotation, ObjSpaceLightDir(v.vertex)).xyz;
+          o.viewDir = mul(rotation, ObjSpaceViewDir(v.vertex)).xyz;
+
+          return o;
+        }
+
+        fixed4 frag(v2f i) : SV_Target {
+          fixed3 tangentLightDir = normalize(i.lightDir);
+          fixed3 tangentViewDir = normalize(i.viewDir);
+
+          // 对法线纹理_BumpMap 进行采样
+          fixed4 packedNormal = tex2D(_BumpMap, i.uv.zw);
+          fixed3 tangentNormal;
+          // tangentNormal.xy = (packedNormal.xy * 2 - 1) * _BumpScale; 
+          // tangentNormal.z = sqrt (1.0 - saturate (dot (tangentNormal.xy, tangentNormal.xy))) ;
+          tangentNormal = UnpackNormal(packedNormal); // 使用 Unity 的内置函数 UnpackNonnal 来得到正确的法线方向
+          tangentNormal.xy *= _BumpScale;
+          tangentNormal.z = sqrt(1.0 - saturate(dot(tangentNormal.xy, tangentNormal.xy)));
+          fixed3 albedo = tex2D(_MainTex, i.uv).rgb * _Color.rgb;
+          fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz * albedo;
+          fixed3 diffuse = _LightColor0.rgb * albedo * saturate(dot(tangentNormal, tangentLightDir));
+          fixed3 halfDir = normalize(tangentLightDir + tangentViewDir);
+          fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(saturate(dot(tangentNormal, halfDir)), _Gloss);
+          return fixed4(ambient + diffuse + specular, 1.0);
+        }
+
+        ENDCG
+      }
+    }
+
+    Fallback "Specular"
+  }
+  ```
+
 - 在世界空间下进行光照计算，把采样得到的法线方向变换到世界空间下，再和世界空间下的光照方向和视角方向进行计算。
