@@ -1681,15 +1681,15 @@ Shader "Unity Shaders Book/Chapter 7/Single Texture" {
 - 可以重用法线纹理。
 - 可压缩。由于切线空间下的法线纹理中法线的 Z 方向总是正方向，因此我们可以仅存储 XY 方向，而推导得到 Z 方向。而模型空间下的法线纹理由于每个方向都是可能的，因此必须存储 3 个方向的值，不可压缩。
 
-##### 切线空间下的法线纹理
-
 计算光照模型是坐标转换有两种思路，从效率上方法1优于方法2，但从通用性上方法2优于方法1。
 
-- 在切线空间下进行光照计算，把光照方向、视角方向变换到切线空间下；
+##### 切线空间下的法线纹理
 
-  基本思路是：在片元着色器中通过纹理采样得到切线空间下的法线，然后再与切线空间下的视角方向、光照方向等进行计算，得到最终的光照结果。
+在切线空间下进行光照计算，把光照方向、视角方向变换到切线空间下；
 
-  ```cs
+基本思路是：在片元着色器中通过纹理采样得到切线空间下的法线，然后再与切线空间下的视角方向、光照方向等进行计算，得到最终的光照结果。
+
+```cs
   Shader "Unity Shaders Book/Chapter 7/Normal Map In Tangent Space" {
     Properties {
       _Color ("Color Tint", Color) = (1,1,1,1)
@@ -1783,4 +1783,285 @@ Shader "Unity Shaders Book/Chapter 7/Single Texture" {
   }
   ```
 
-- 在世界空间下进行光照计算，把采样得到的法线方向变换到世界空间下，再和世界空间下的光照方向和视角方向进行计算。
+##### 世界空间下的法线纹理
+
+在世界空间下进行光照计算，把采样得到的法线方向变换到世界空间下，再和世界空间下的光照方向和视角方向进行计算。
+
+基本思想是：在顶点着色器中计算从**切线空间到世界空间**的变换矩阵，并把它传递给片元着色器。变换矩阵的计算可以由顶点的切线、副切线和法线在世界空间下的表示来得到。最后，我们只需要在片元着色器中把法线纹理中的法线方向从切线空间变换到世界空间下即可(尽管这种方法需要更多的计算，但在需要使用 Cubemap 进行环境映射等情况下，我们就需要使用这种方法)。
+
+```cs
+Shader "Unity Shaders Book/Chapter 7/Normal Map In Tangent Space" {
+  Properties {
+    _Color ("Color Tint", Color) = (1,1,1,1)
+    _MainTex ("Main Tex", 2D) = "white" {}
+    // 法线纹理，"bump" 是 Unity 内置的法线纹理，当没有提供任何法线纹理时，"bump"就对应了模型自带的法线信息。
+    _BumpMap ("Normal Map", 2D) = "bump" {}
+    // _BumpScale 是用于控制凹凸程度的，当它为0时，意味着该法线纹理不会对光照产生任何影响。
+    _BumpScale ("Bump Scale", Float) = 1.0
+    _Specular ("Specular", Color) = (1,1,1,1)
+    _Gloss ("Gloass", Range(8.0, 256)) = 20
+  }
+
+  SubShader {
+    Pass {
+      Tags { "LightMode" = "ForwardBase" }
+
+      CGPROGRAM
+
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+
+      fixed4 _Color;
+      sampler2D _MainTex;
+      float4 _MainTex_ST;
+      sampler2D _BumpMap;
+      float4 _BumpMap_ST;
+      float _BumpScale;
+      fixed4 _Specular;
+      float _Gloss;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+        // TANGENT 语义来描述 float4 类型的 tangent 变量，以告诉 Unity 把顶点的切线方向填充到 tangent 变量中。
+        // tangent.w 分量用来决定切线空间中的第三个坐标轴一副切线的方向性
+        float4 tangent : TANGENT;
+        float4 texcoord : TEXCOORD0;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float4 uv : TEXCOORD0;
+        // 存储从切线空间到世界空间的变换矩阵的每一行
+        float4 TtoW0 : TEXCOORD1;
+        float4 TtoW1 : TEXCOORD2;
+        float4 TtoW2 : TEXCOORD3;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.uv.xy = v.texcoord.xy * _MainTex_ST.xy + _MainTex_ST.zw;
+        o.uv.zw = v.texcoord.xy * _BumpMap_ST.xy + _BumpMap_ST.zw;
+
+        float3 worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        float3 worldNormal = UnityObjectToWorldNormal(v.normal);
+        float3 worldTangent = UnityObjectToWorldDir(v.tangent.xyz);
+        float3 worldBinormal = cross(worldNormal, worldTangent) * v.tangent.w;
+
+        o.TtoW0 = float4(worldTangent.x, worldBinormal.x, worldNormal.x, worldPos.x);
+        o.TtoW1 = float4(worldTangent.y, worldBinormal.y, worldNormal.y, worldPos.y);
+        o.TtoW2 = float4(worldTangent.z, worldBinormal.z, worldNormal.z, worldPos.z);
+
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        float3 worldPos = float3(i.TtoW0.w, i.TtoW1.w, i.TtoW2.w);
+
+        float3 tangentLightDir = normalize(UnityWorldSpaceLightDir(worldPos));
+        float3 tangentViewDir = normalize(UnityWorldSpaceViewDir(worldPos));
+
+        // 对法线纹理_BumpMap 进行采样
+        fixed4 packedNormal = tex2D(_BumpMap, i.uv.zw);
+        fixed3 tangentNormal;
+        // tangentNormal.xy = (packedNormal.xy * 2 - 1) * _BumpScale;
+        // tangentNormal.z = sqrt (1.0 - saturate (dot (tangentNormal.xy, tangentNormal.xy))) ;
+        tangentNormal = UnpackNormal(packedNormal); // 使用 Unity 的内置函数 UnpackNonnal 来得到正确的法线方向
+        tangentNormal.xy *= _BumpScale;
+        tangentNormal.z = sqrt(1.0 - saturate(dot(tangentNormal.xy, tangentNormal.xy)));
+        // + 把法线变换到世界空间下
+        tangentNormal = normalize(half3(dot(i.TtoW0.xyz, tangentNormal), dot(i.TtoW1.xyz, tangentNormal), dot(i.TtoW2.xyz, tangentNormal)));
+
+        fixed3 albedo = tex2D(_MainTex, i.uv).rgb * _Color.rgb;
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz * albedo;
+        fixed3 diffuse = _LightColor0.rgb * albedo * saturate(dot(tangentNormal, tangentLightDir));
+        fixed3 halfDir = normalize(tangentLightDir + tangentViewDir);
+        fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(saturate(dot(tangentNormal, halfDir)), _Gloss);
+        return fixed4(ambient + diffuse + specular, 1.0);
+      }
+
+      ENDCG
+    }
+  }
+
+  Fallback "Specular"
+}
+```
+
+### 渐变纹理
+
+这种技术最初由 Gooch 等人(Valve 公司)在 1998 年他们发表的一篇著名的论文《A Non-Photorealistic Lighting Model For Automatic Technical Illustration》中被提出，在这篇论文中，作者提出了一种基  于冷到暖色调(cool-to-warm tones)的着色技术，用来得到一种插画风格的渲染效果。渐变纹理常用来控制漫反射光照。
+
+```cs
+Shader "Unity Shader Book/Chapter 6/Ramp Texture"
+{
+  Properties {
+    _Color ("Color Tint", Color) = (1, 1, 1, 1)
+    _RampTex ("Ramp Tex", 2D) = "white" {}
+    _Specular ("Specular", Color) = (1, 1, 1, 1)
+    _Gloss ("Gloss", Range(8.0, 256)) = 20
+  }
+
+  SubShader {
+    Pass {
+      Tags { "LightMode"="ForwardBase" }
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+
+      fixed4 _Color;
+      sampler2D _RampTex;
+      float4 _RampTex_ST;
+      fixed4 _Specular;
+      float _Gloss;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+        float4 texcoord : TEXCOORD0;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldNormal : TEXCOORD0;
+        float3 worldPos : TEXCOORD1;
+        float2 uv : TEXCOORD2;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = UnityObjectToWorldNormal(v.normal);
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        o.uv = TRANSFORM_TEX(v.texcoord, _RampTex);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        fixed3 worldNormal = normalize(i.worldNormal);
+        fixed3 worldLightDir = normalize(UnityWorldSpaceLightDir(i.worldPos));
+
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+        // 使用半兰伯特模型纹理采样
+        fixed halfLambert = 0.5 * dot(worldNormal, worldLightDir) + 0.5;
+        fixed3 diffuseColor = tex2D(_RampTex, fixed2(halfLambert, halfLambert)).rgb * _Color.rgb;
+
+        fixed3 diffuse = _LightColor0.rgb * diffuseColor;
+
+        fixed3 viewDir = normalize(UnityWorldSpaceViewDir(i.worldPos));
+        fixed3 halfDir = normalize(worldLightDir + viewDir);
+        fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(saturate(dot(worldNormal, halfDir)), _Gloss);
+        return fixed4(ambient + diffuse +specular, 1.0);
+      }
+
+      ENDCG
+    }
+  }
+
+  Fallback "Specular"
+}
+```
+
+### 遮罩纹理(mask texture)
+
+使用遮罩纹理的流程一般是：通过采样得到遮罩纹理的纹素值，然后使用其中某个（或某几个）通道的值（例如 texel.r) 来与某种表面属性进行相乘，这样，当该通道的值为 0 时，可以保护表面不受该屈性的影响。**使用遮罩纹理可以让美术人员更加精准（像素级别）地控制模型表面的各种性质**
+
+通常，我们会充分利用一张纹理的RGBA四个通道，用于存储不同的属性。例如，我们可以把高光反射的强度存储在 R 通道，把边缘光照的强度存储在 G 通道，把高光反射的指数部分存储在 B 通道，最后把自发光强度存储在A通道。
+
+```cs
+Shader "Unity Shaders Book/Chapter 7/Mask Texture" {
+  Properties {
+    _Color ("Color Tint", Color) = (1,1,1,1)
+    _MainTex ("Main Tex", 2D) = "white" {}
+    _BumpMap ("Bump Map", 2D) = "bump" {}
+    _BumpScale ("Bump Scale", Float) = 1.0
+    // 高光反射遮罩纹理
+    _SpecularMask ("Specular Mask", 2D) = "white" {}
+    // 控制遮罩影响度的系数
+    _SpecularScale ("Specular Scale", Float) = 1.0
+    _Specular ("Specular", Color) = (1,1,1,1)
+    _Gloss ("Gloss", Range(8.0, 256)) = 20
+  }
+
+  SubShader {
+    Pass {
+      Tags { "LightMode" = "ForwardBase" }
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      #include "Lighting.cginc"
+
+      fixed4 _Color;
+      sampler2D _MainTex;
+      // 为主纹理_MainTex、法线纹理_BwnpMap 和遮罩纹理_SpecularMask 定义了
+      // 它们共同使用的纹理属性变盐_MainTex_ST。这意味着，在材质面板中修改主纹
+      // 理的平铺系数和偏移系数会同时影响 3 个纹理的采样。使用这种方式可以让我们
+      // 节省需要存储的纹理坐标数目
+      float4 _MainTex_ST;
+      sampler2D _BumpMap;
+      float _BumpScale;
+      sampler2D _SpecularMask;
+      float _SpecularScale;
+      fixed4 _Specular;
+      float _Gloss;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+        float4 tangent : TANGENT;
+        float4 texcoord : TEXCOORD0;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float2 uv : TEXCOORD0;
+        float3 lightDir : TEXCOORD1;
+        float3 viewDir : TEXCOORD2;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.uv.xy = v.texcoord.xy * _MainTex_ST.xy  + _MainTex_ST.zw;
+
+        TANGENT_SPACE_ROTATION;
+
+        o.lightDir = mul(rotation, ObjSpaceLightDir(v.vertex)).xyz;
+        o.viewDir = mul(rotation, ObjSpaceViewDir(v.vertex)).xyz;
+
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        fixed3 tangentLightDir = normalize(i.lightDir);
+        fixed3 tangentViewDir = normalize(i.viewDir);
+
+        fixed3 tangentNormal = UnpackNormal(tex2D(_BumpMap, i.uv));
+        tangentNormal.xy *= _BumpScale;
+        tangentNormal.z = sqrt(1.0 - saturate(dot(tangentNormal.xy, tangentNormal.xy)));
+
+        fixed3 albedo = tex2D(_MainTex, i.uv).rgb * _Color.rgb;
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz * albedo;
+
+        fixed3 diffuse = _LightColor0.rgb * albedo * saturate(dot(tangentNormal, tangentLightDir));
+
+        fixed3 halfDir = normalize(tangentLightDir + tangentViewDir);
+        fixed specularMask = tex2D(_SpecularMask, i.uv).r * _SpecularScale;
+
+        fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(saturate(dot(tangentNormal, halfDir)), _Gloss) * specularMask;
+        return fixed4(ambient + diffuse + specular, 1.0);
+      }
+
+      ENDCG
+    }
+  }
+  Fallback "Specular"
+}
+```
