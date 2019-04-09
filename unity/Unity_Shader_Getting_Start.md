@@ -1515,7 +1515,7 @@ Shader "Unity Shader Book/Chapter 6/Specular Vertex-Level" {
       fixed4 frag(v2f i) : SV_Target {
         // 计算漫反射部分
         fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
-        fixed3 worldNormal = normalize(i.worldNormal); 
+        fixed3 worldNormal = normalize(i.worldNormal);
         fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz);
         fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(worldNormal, worldLightDir));
         // 计算高光反射部分
@@ -1762,7 +1762,7 @@ Shader "Unity Shaders Book/Chapter 7/Single Texture" {
           // 对法线纹理_BumpMap 进行采样
           fixed4 packedNormal = tex2D(_BumpMap, i.uv.zw);
           fixed3 tangentNormal;
-          // tangentNormal.xy = (packedNormal.xy * 2 - 1) * _BumpScale; 
+          // tangentNormal.xy = (packedNormal.xy * 2 - 1) * _BumpScale;
           // tangentNormal.z = sqrt (1.0 - saturate (dot (tangentNormal.xy, tangentNormal.xy))) ;
           tangentNormal = UnpackNormal(packedNormal); // 使用 Unity 的内置函数 UnpackNonnal 来得到正确的法线方向
           tangentNormal.xy *= _BumpScale;
@@ -2063,5 +2063,355 @@ Shader "Unity Shaders Book/Chapter 7/Mask Texture" {
     }
   }
   Fallback "Specular"
+}
+```
+
+## 透明效果
+
+在 Unity 中，通常使用两种方法来实现透明效果：第一种是使用**透明度测试(Alpha Test)**，这种方法其实**无法真正得到**半透明效果；另一种是**透明度混合(Alpha Blending)**。
+
+- 深度缓冲
+
+在实时渲染中，深度缓冲用于解决可见性(visibility)问题，它可以决定哪个物体的哪些部分会被渲染在前面，而哪些部分会被其他物体遮挡。它的**基本思想**是根据深度缓存中的值来判断该片元距离摄像机的距离，当渲染一个片元时，需要把它的深度值和已经存在于深度缓冲中的值进行比较（如果开启了深度测试），如果它的值距离摄像机更远，那么说明这个片元不应该被渲染到屏幕上（有物体挡住了它）；否则，这个片元应该覆盖掉此时颜色缓冲中的像素值，并把它的深度值更新到深度缓冲中（如果开启了深度写入）。
+
+当使用透明度混合时，深度写入CZWrite)是关闭的。
+
+### 透明度测试
+
+只要一个片元的透明度不满足条件（通常是小于某个阈值），那么它对应的片元就会被舍弃。透明度测试**不需要关闭深度写入**，它和其他不透明物体最大的不同就是它会根据透明度来舍弃一些片元。它产生的效果很极端，要么完全透明，即看不到，要么完全不透明。而且得到的透明效果在边缘处往往参差不齐有锯齿，这是因为在边界处纹理的透明度的变化精度问题。
+
+通常会在片元着色器中使用 `clip` 函数来进行透明度测试。
+
+```cs
+void clip(float4 x)
+{
+  // 如果给定参数的任何一个分量是负数，就会舍弃当前像素的输出颜色
+  if(any(x < 0))
+    discard;
+}
+```
+
+```cs
+Shader "Unity Shaders Book/Chapter 8/AlphaTest"
+{
+  Properties {
+    _Color ("Main Tint", Color) = (1,1,1,1)
+    _MainTex ("Main Tex", 2D) = "white" {}
+    // 决定调用 clip 进行透明度测试时使用的判断阈值
+    _CutOff ("Alpha Cut Off", Range(0,1)) = 0.5
+  }
+  SubShader {
+    Tags { "Quene"="AlphaTest" "IgnoreProjector"="True" "RenderType"="TransparentCutout" }
+    Pass {
+      Tags { "LightMode"="ForwardBase" }
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      #include "Lighting.cginc"
+
+      fixed4 _Color;
+      sampler2D _MainTex;
+      float4 _MainTex_ST;
+      fixed _CutOff;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+        float4 texcoord : TEXCOORD0;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldNormal : TEXCOORD0;
+        float3 worldPos : TEXCOORD1;
+        float2 uv : TEXCOORD2;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = UnityObjectToWorldNormal(v.normal);
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        o.uv = TRANSFORM_TEX(v.texcoord, _MainTex);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        fixed3 worldNormal = normalize(i.worldNormal);
+        fixed3 worldLightDir = normalize(UnityWorldSpaceLightDir(i.worldPos));
+        fixed4 texColor = tex2D(_MainTex, i.uv);
+
+        clip(texColor.a - _CutOff);
+
+        fixed3 albedo = texColor.rgb * _Color.rgb;
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz * albedo;
+        fixed3 diffuse = _LightColor0.rgb * albedo * saturate(dot(worldNormal, worldLightDir));
+        return fixed4(ambient + diffuse, 1.0);
+      }
+
+      ENDCG
+    }
+  }
+  Fallback "Transparent/Cutout/VertexLit"
+}
+```
+
+### 透明度混合
+
+使用当前片元的透明度作为混合因子，与已经存储在颜色缓冲中的颜色值进行混合，得到新的颜色。但是，透明度混合**需要关闭深度写入**（深度缓冲只读），这使得我们要非常小心物体的渲染顺序(当模型本身有复杂的遮挡关系或是包含了复杂的非凸网格的时候，就会有各种各样因为排序错误而产生的错误的透明效果)。
+
+为了进行混合，我们需要使用 Unity 提供的混合命令 Blend。
+
+**_Shaderlab的Blend命令_**
+
+| 语义 | 描述 |
+| --- | --- |
+| Blend Off | 关闭混合 |
+| Blend SrcFactor DstFactor | 开启混合，并设置混合因子。源颜色（该片元产生的颜色）会乘以 SrcFactor, 而目标颜色（已经存在于颜色缓存的颜色）会乘以 DstFactor, 然后把两者相加后再存入颜色缓冲中 |
+| Blend SrcFactor DstFactor, SrcFactorA DstFactorA | 与上面的几乎一致，只是使用不同的因子来混合透明通道 |
+| BlendOp BleodOperation | 并非是把源颜色和目标颜色简单相加后混合， 而是使用 BlendOperation 对它们进行其他操作 |
+
+```cs
+Shader "Unity Shaders Book/Chapter 8/AlphaBlend"
+{
+  Properties {
+    _Color ("Main Tint", Color) = (1,1,1,1)
+    _MainTex ("Main Tex", 2D) = "white" {}
+    // 用于在透明纹理的基础上控制整体的透明度
+    _AlphaScale ("Alpha Scale", Range(0, 1)) = 1
+  }
+  SubShader {
+    // Quene 指定为 Transparent
+    // "IgnoreProjector"="True" 这意味着这个 Shader 不会受到投影器 (Projectors) 的影响
+    // RenderType 标签可以让 Unity 把这个 Shader归入到提前定义的组（这里就是 Transparent 组）中，用来指明该 Shader 是一个使用了透明度混合的 Shader。
+    Tags { "Quene"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent" }
+    Pass {
+      Tags { "LightMode"="ForwardBase" }
+      // 关闭深度写入
+      ZWrite Off
+      // 开启设置混合模式
+      // 将源颜色（该片元着色器产生的颜 色）的混合因子设为SrcAlpha,把目标颜色（已经存在于颜色缓冲中的颜色）的混合因子设为OneMinusSrcAlpha
+      Blend SrcAlpha OneMinusSrcAlpha
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      #include "Lighting.cginc"
+
+      fixed4 _Color;
+      sampler2D _MainTex;
+      float4 _MainTex_ST;
+      fixed _AlphaScale;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+        float4 texcoord : TEXCOORD0;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldNormal : TEXCOORD0;
+        float3 worldPos : TEXCOORD1;
+        float2 uv : TEXCOORD2;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = UnityObjectToWorldNormal(v.normal);
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        o.uv = TRANSFORM_TEX(v.texcoord, _MainTex);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        fixed3 worldNormal = normalize(i.worldNormal);
+        fixed3 worldLightDir = normalize(UnityWorldSpaceLightDir(i.worldPos));
+        fixed4 texColor = tex2D(_MainTex, i.uv);
+        fixed3 albedo = texColor.rgb * _Color.rgb;
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz * albedo;
+        fixed3 diffuse = _LightColor0.rgb * albedo * saturate(dot(worldNormal, worldLightDir));
+        // 设置透明通道
+        return fixed4(ambient + diffuse, texColor.a * _AlphaScale);
+      }
+
+      ENDCG
+    }
+  }
+  Fallback "Transparent/VertexLit"
+}
+```
+
+### Unity Shader 的渲染顺序
+
+Unity 为了解决渲染顺序的问题提供了**渲染队列 (render queue)**这一解决方案。使用 SubShader 的 Queue 标签来决定我们的模型将归于哪个渲染队列。Unity在内部使用一系列整数索引来表示每个渲染队列，且索引号越小表示越早被渲染。
+
+**_Unity 提前定义的 5 个渲染队列_**
+
+| 名称 | 队列索引号 | 描述 |
+| --- | --------- | --- |
+| Background | 1000 | 这个渲染队列会在任何其他队列之前被渲染，我们通常使用该队列来渲染那些需要绘制在背景上的物体 |
+| Geometry | 2000 | **默认**的渲染队列，大多数物休都使用这个队列。不透明物体使用这个队列 |
+| AlphaTest  | 2450 | 需要透明度测试的物体使用这个队列。在 Unity 5 中它从 Geometry 队列中被单独分出来，这是因为在所有不透明物体渲染之后再渲染它们会更加高效 |
+| Transparent | 3000 | 这个队列中的物体会在所有 Geometry 和 AlphaTest 物体渲染后，再按从后往前的顺序进行渲染。任何使用了透明度混合（例如关闭了深度写入的 Shader) 的物体都应该使用该队列 |
+| Overlay | 4000 | 该队列用于实现一些叠加效果。任何需要在最后渲染的物体都应该使用该队列 |
+
+如果我们想要通过*透明度混合*来实现透明效果，代码中应该包含类似下面的代码：
+
+```cs
+SubShader {
+  Tags { "Quene" = "Transparent" }
+  Pass {
+    // 关闭深度写入
+    // 也可以用在 SubShader 中，表示该 SubShader 下的所有 Pass 都会关闭深度写入
+    ZWrite Off
+  }
+}
+```
+
+### 开启深度写入的半透明效果
+
+针对关闭深度写入实现的半透明效果存在错误排序的情况而进行优化。
+
+**使用两个 Pass 来渲染模型**：第一个 Pass 开启深度写入，但不输出颜色，它的目的仅仅是为了把该模型的深度值写入深度缓冲中；第二个 Pass 进行正常的透明度混合，由于上 个 Pass 已经得到了逐像素的正确的深度信息，该 Pass 就可以按照像素级别的深度排序结果进行透明渲染。缺点在于，多使用一个 Pass 会对性能造成影响。
+
+```cs
+// 在透明度混合使用的Shader基础上添加一个新Pass
+    ...
+    // 新添加的 Pass: 目的仅仅是为了把模型的深度信息写入深度缓冲中
+    Pass {
+      ZWrite On
+      // ColorMask 用于设置颜色通道的写掩码 (write mask)，设置为0表示不写入任何颜色通道
+      // `ColorMask RGB | A | 0 | 其他任何R、 G、 B、 A的组合`
+      ColorMask 0
+    }
+    Pass {
+      ...
+    }
+    ...
+```
+
+### ShaderLab 的混合命令
+
+#### 混合等式(blend equation)
+
+已知两个操作数：源颜色 `S` 和目标颜色 `D`, 想要得到输出颜色 `O` 就必须使用一个等式来计算。我们把这个等式称为混合等式(blend equation)。
+
+当进行混合时，我们需要使用**两个混合等式**：一个用于混合 RGB 通道，一个用于混合 A 通道。当设置混合状态时，我们实际上设置的就是混合等式中的**操作**和**因子**。在默认情况下，混合等式使用的操作都是**加操作**（我们也可以使用其他操作），我们只需要再设置一下混合因子即可。
+
+##### 混合因子
+
+**_Shaderlab中设置混合因子的命令_**
+
+| 命令 | 描述 |
+| --- | --- |
+| `Blend SrcFactor DstFactor` | 开启混合，并设置混合因子。源颜色（该片元产生的颜色）会乘以 Srcfactor, 而目标颜色（已经存在于颜色缓存的颜色）会乘以 Dstfactor, 然后把两者相加后再存入颜色缓冲中【使用同样的混合因子来混合 RGB 通道和 A 通道】 |
+| `Blend SrcFactor Dstfactor, SrcFactorA DstFactorA` | 和上面几乎一样，只是使用不同的因子来混合透明通道 |
+
+```cs
+// 两个混合等式
+O_rgb = SrcFactor x S_rgb + DstFactor x D_rgb
+O_a = SrcFactorA x S_a + DstFactorA x D_a
+```
+
+**_Shaderlab中的混合因子_**
+
+| 参数 | 描述 |
+| --- | --- |
+| One | 因子为 `1` |
+| Zero | 因子为 `0` |
+| SrcColor | 因子为`源颜色值`。当用于混合 RGB 的混合等式时，使用 SrcColor 的RGB分量作为混合因子：当用于混合 A 的混合等式时，使用 SrcColor 的 A 分量作为混合因子 |
+| SrcAlpha | 因子为`源颜色的透明度值(A通道)` |
+| DstColor | 因子为`源颜色值`。当用于混合 RGB 通道的混合等式时，使用 DstColor 的 RGB 分量作为混合因子：当用于混合 A 通道的混合等式时，使用 DstColor 的 A 分量作为混合因子 |
+| DstAlpha | 因子为`目标颜色的透明度值(A通道)` |
+| OneMinusSrcColor | 因子为 `(1-源颜色)`。当用于混合RGB的混合等式时，使用结果的 RGB 分量作为混合因子：当用于混合 A 的混合等式时，使用结果的 A 分量作为混合因子 |
+| OneMinusSrcAlpha | 因子为 `(1-源颜色的透明度值)` |
+| OneMinusDstColor | 因子为 `(1-目标颜色)`。当用于混合RGB的混合等式时，使用结果的 RGB 分量作为混合因子：当用于混合 A 的混合等式时，使用结果的 A 分量作为混合因子 |
+| OneMinusDstAlpha | 因子为 `(1-目标颜色的透明度值)` |
+
+##### 混合操作
+
+在默认情况下，混合等式使用的操作都是**加操作**，可以使用 ShaderLab 的`BlendOp BlendOperation` 命令，即混合操作命令来指定操作。
+
+**_Shaderlab中的混合操作_**
+
+| 操作 | 描述 |
+| --- | --- |
+| Add | 将混合后的源颜色和目的颜色相加。默认的混合操作。使用的混合等式是：`O_rgb = SrcFactor x S_rgb + DstFactor x D_rgb`, `O_a = SrcFactorA x S_a + DstFactorA x D_a` |
+| Sub | 用混合后的源颜色减去混合后的目的颜色。 使用的混合等式是：使用的混合等式是：`O_rgb = SrcFactor x S_rgb - DstFactor x D_rgb`, `O_a = SrcFactorA x S_a - DstFactorA x D_a` |
+| RevSub | 用混合后的目的颜色减去混合后的源颜色。使用的混合等式是：`O_rgb = DstFactor x D_rgb - SrcFactor x S_rgb`, `O_a = DstFactorA x D_a - SrcFactorA x S_a` |
+| Min | 使用源颜色和目的颜色中较小的值，是逐分量比较的。使用的混合等式是：`O_rgba = (min(S_r, D_r),min(S_g, D_g),min(S_b, D_b),min(S_a, D_a))` |
+| Max | 使用源颜色和目的颜色中较大的值，是逐分量比较的。使用的混合等式是：`O_rgba = (max(S_r, D_r),max(S_g, D_g),max(S_b, D_b),max(S_a, D_a))` |
+| 其他逻辑操作 | 仅 DirectX 11.1 中支持 |
+
+#### 常见混合类型
+
+```cs
+// 正常(Normal), 即透明度混合
+Blend SrcAlpha OneMinusSrcAlpha
+// 柔和相加(Soft Additive)
+Blend OneMinusDstColor One
+// 正片叠底(Multiply), 即相乘
+Blend DstColor Zero
+// 两倍相乘(2x Multiply)
+Blend DstColor SrcColor
+// 变暗(Darken)
+// Min和Max混合操作会忽略混合因子
+BlendOp Min
+Blend One One
+// 变亮(Lighten)
+BlendOp Max
+Blend One One
+// 滤色(Screen)
+Blend OneMinusDstColor One
+// 等同于
+Blend One OneMinusSrcColor
+// 线性减淡(Linear Dodge)
+Blend One One
+```
+
+![不同混合状态设置得到的效果](http://static.zybuluo.com/candycat/uvoq8qpet472e7fquzdu479t/blend.png)
+
+### 双面渲染的透明效果
+
+想要得到双面渲染的效果，可以使用 `Cull` 指令来控制需要剔除哪个面的渲染图元。
+
+```cs
+// Back 默认, 背对着摄像机的渲染图元就不会被渲染
+// Front 朝向摄像机的渲染图元就不会被渲染
+// Off 关闭剔除功能，那么所有的渲染图元都会被渲染(这时需要渲染的图元数目会成倍增加)，通常情况是不会关闭剔除功能的
+Cull Back | Front | Off
+```
+
+- 透明度测试的双面渲染
+
+```cs
+// 仅在透明度测试Shader基础上添加 Cull Off
+Pass {
+  Tags { "LightMode"="ForwardBase" }
+
+  Cull Off
+  ...
+}
+```
+
+- 透明度混合的双面渲染
+
+把双面渲染的工作分成两个Pass，第一个 Pass 只渲染背面，第二个 Pass 只渲染正面，以保证正确的深度渲染关系。然后在两个 Pass 中分别使用 Cull 指令剔除不同朝向的渲染图元。
+
+```cs
+Pass {
+  Tags { "LightMode"="ForwardBase" }
+  // ++++++
+  Cull Front
+  ...
+}
+// ++++++
+Pass {
+  Tags { "LightMode"="ForwardBase" }
+
+  Cull Back
+  ...
 }
 ```
