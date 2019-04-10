@@ -1550,6 +1550,68 @@ fixed4 frag(v2f i) : SV_Target {
 
 [UnityCG.cginc中一些常用的帮助函数](Unity_Docs.md#HLSL%20片段)
 
+## 光照进阶
+
+### Unity 的渲染路径
+
+在 Unity 里，**渲染路径(Rendering Path)**决定了光照是如何应用到 Unity Shader 中的。通过使用 `Pass` 指定渲染路径，就可以通过 Unity 提供的内置光照变量来访问这些属性。Unity 支持多种类型的渲染路径。在Unity5.0版本之前，主要有3种：
+
+- 前向渲染路径(Forward Rendering Path)，默认
+- 延迟渲染路径 (Deferred Rendering Path)，被新的延迟渲染路径替换
+- 顶点照明渲染路径 (Vertex Lit Rendering Path)，已废弃
+
+**_LightMode标签支持的渲染路径设置选项_**
+
+| 标签名 | 描述 |
+| ----- | --- |
+| Always | 不管使用哪种渲染路径，该 Pass 总是会被渲染，但不会计算任何光照 |
+| ForwardBase | 用于前向渲染。该 Pass 会计算环境光、最重要的平行光、逐顶点/SH 光源和 Lightmaps |
+| ForwardAdd | 用于前向渲染。该 Pass 会计算额外的逐像素光源，每个 Pass 对应一个光源 |
+| Deferred | 用于延迟渲染。该 Pass 会渲染 G 缓冲 (G-buffer) |
+| ShadowCaster | 把物体的深度信息渲染到阴影映射纹理 (shadowmap) 或一张深度纹理中 |
+| PrepassBase | 用于遗留的延迟渲染。该 Pass 会渲染法线和高光反射的指数部分 |
+| PrepassFinal | 用于遗留的延迟渲染。该 Pass 通过合并纹理、光照和自发光来渲染得到最后的颜色 |
+| Vertex、VertexLMRGBM 和 VertexLM  | 用于遗留的顶点照明渲染 |
+
+#### 前向渲染路径
+
+前向渲染路径是我们_最常用_的一种渲染路径。每进行一次完整的前向渲染，需要渲染该对象的渲染图元，并计算两个缓冲区的信息：一个是颜色缓冲区，一个是深度缓冲区。利用深度缓冲来决定一个片元是否可见，如果可见就更新颜色缓冲区中的颜色值。假设场景中有N个物体，每个物体受 `M` 个光源的影响，那么要渲染整个场景一共需要 `NxM` 个`Pass`，如果有大量逐像素光照，那么需要执行的 `Pass` 数目也会很大。因此，渲染引擎通常会限制每个物体的逐像素光照的数目。
+
+在Unity中，前向渲染路径有3种处理光照（即照亮物体）的方式：**逐顶点处理**、**逐像素处理**，**球谐函数(Spherical Harmonics, SH)**处理。SH)处理。而决定一个光源使用哪种处理模式取决于它的**类型**(平行光还是其他类型的光源)和**渲染模式**(该光源是否是重要的`Important`-> 按逐像素光源处理)。
+
+- 场景中最亮的平行光总是按逐像素处理的。
+- 渲染模式被设置成 `Not Important` 的光源，会按逐顶点或者SH处理。
+- 渲染模式被设置成 `Important` 的光源，会按逐像素处理。
+- 如果根据以上规则得到的逐像素光源数量小于 Quality Setting 中的逐像素光源数量(Pixel Light Count), 会有更多的光源以逐像素的方式进行渲染。
+
+![前向渲染的两种Pass](http://static.zybuluo.com/candycat/575lq2zgnsaop3nw2miyobt3/forward_rendering.png)
+
+**重点说明**：
+
+- 除了需要设置 Pass 的标签，还需要分别使用 `#pragma multi_compile_fwdbase` 和 `#pragma multi_compile_fwdadd` 编译指令才能在相关 Pass 获得正确的光照变量。
+- `Base Pass` 中渲染的平行光默认是支持阴影的（如果开启了光源的阴影功能），而`Additional Pass` 中渲染的光源在默认情况下是没有阴影效果的(使用 `#pragma multi_compile_fwdadd_fullshadows` 代替 `#pragma multi_compile_fwdadd` 编译指令，可为点光源和聚光灯开启阴影效果)。
+- 环境光和自发光也是在 `Base Pass` 中计算的(环境光和自发光只需计算一次)。
+- 一般在 `Additional Pass` 的渲染设置中，需要开启和设置混合模式，防止之前的渲染结果被覆盖。
+
+**_前向渲染可以使用的内置光照变量_**
+| 名称 | 类型 | 描述 |
+| --- | --- | --- |
+| `_LightColor0` | float4 | 该 Pass 处理的逐像素光源的颜色 |
+| `_WorldSpaceLightPos0` | float4 | `_WorldSpaceLightPos0.xyz` 是该 Pass 处理的逐像素光源的位置。如果该光源是平行光，那么`_WorldSpaceLightPos0.w` 是 0. 其他光源类型 `w` 值为 1 |
+| `_LightMatrix0`  | float4x4 | 从世界空间到光源空间的变换矩阵。可以用于采样 cookie 和光强衰减 (attenuation) 纹理 |
+| `unity_4LightPosX0, unity_4LightPosY0, unity_4LightPosZ0`  | float4 | 仅用于 Base Pass。前 4 个非重要的点光源在世界空间中的位置 |
+| `unity_4LightAtten0`  | float4 | 仅用于 Base Pass。存储了前 4 个非重要的点光源的衰减因子 |
+| `unity_LightColor` | half4[4]  | 仅用于 Base Pass。存储了前 4 个非重要的点光源的颜色 |
+
+**_前向渲染可以使用的内置光照函数_**
+
+| 函数名 | 描述 |
+| ----- | --- |
+| `float3 WorldSpaceLightDir (float4 v)`  | 仅可用于前向渲染中。输入一个模型空间中的顶点位置，返回世界空间中从该点到光源的光照方向。内部实现使用了 `UnityWorldSpaceLightDir` 函数。没有被归一化 |
+| `float3 UnityWorldSpaceLightDir (float4 v)` | 仅可用于前向渲染中。输入一个世界空间中的顶点位置，返回世界空间中从该点到光源的光照方向。没有被归一化 |
+| `float3 ObjSpaceLightDir(float4 v)` | 仅可用于前向渲染中。输入一个模型空间中的顶点位置，返回模型空间中从该点到光源的光照方向。没有被归一化 |
+| `float3 Shade4PointLights (...)` | 仅可用于前向渲染中。计算四个点光源的光照。它的参数是已经打包进矢量的光照数据，如 `unity_4LightPosX0`, `unity_4LightPosY0`,`unity_4LightPosZ0`,`unity_LightColor`和`unity_4LightAtten0` 等。前向渲染通常会使用这个函数来计算逐顶点光照 |
+
 ## 基础纹理
 
 !!这里实现的 Shader 往往并不能直接应用到实际项目中!!
