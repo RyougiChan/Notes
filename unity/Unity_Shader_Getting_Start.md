@@ -1325,7 +1325,7 @@ Shader "Unity Shaders Book/Chapter 6/Diffuse Vertex-Level" {
     }
   }
   Fallback "Diffuse"
-}
+}__
 ```
 
 #### 实现逐像素光照
@@ -1676,6 +1676,147 @@ Unity 共支持 4 种光源类型：**平行光**、**点光源**、**聚光灯*
 - 平行光 几何属性只有方向，没有位置和衰减的概念。
 - 点光源 由空间中的一个球体定义。点光源可以表示由一个点发出的、向所有方向延伸的光。点光源球心处的光照强度最强，球体边界处的最弱为 0。
 - 聚光灯 由空间中的一块锥形区域定义。用于表示由一个特定位置出发、向特定方向延伸的光。聚光灯的衰减也是随着物体逐渐远离点光源而逐渐减小，在锥形的顶点处光照强度最强，在锥形的边界处强度为0。
+
+#### 处理不同的光源类型(前向渲染)
+
+```cs
+Shader "Unlit/Chapter9-ForwardRendering"
+{
+  Properties {
+    _Diffuse ("Diffuse", Color) = (1, 1, 1, 1)
+    // 控制高光反射颜色
+    _Specular ("Specular", Color) = (1, 1, 1, 1)
+    // 控制高光区域的大小
+    _Gloss ("Gloss", Range(8.0, 256)) = 20
+  }
+
+  SubShader {
+    // Base Pass
+    Pass {
+      Tags { "LightMode" = "ForwardBase" }
+
+      CGPROGRAM
+      #pragma multi_compile_fwdbase
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+
+      fixed4 _Diffuse;
+      fixed4 _Specular;
+      float _Gloss;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldNormal : TEXCOORD0;
+        float3 worldPos : TEXCOORD1;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = UnityObjectToWorldNormal(v.normal);
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        // 计算漫反射部分
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+        fixed3 worldNormal = normalize(i.worldNormal);
+        fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz);
+        fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(worldNormal, worldLightDir));
+        // 计算高光反射部分
+        fixed3 reflectDir = normalize(reflect(-worldLightDir, worldNormal));
+        fixed3 viewDir = normalize(_WorldSpaceCameraPos.xyz - i.worldPos.xyz);
+        fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(saturate(dot(reflectDir, viewDir)), _Gloss);
+        // 衰减，平行光没有衰减
+        fixed atten = 1.0;
+
+        return fixed4(ambient + (diffuse + specular) * atten, 1.0);
+      }
+      ENDCG
+    }
+    // Additional Pass
+    Pass {
+      Tags { "LightMode"="ForwardAdd" }
+      // 如果没有使用 Blend 命令的话，Additional Pass 会直接覆盖掉之前的光照结果。
+      Blend One One
+      CGPROGRAM
+      #pragma multi_compile_fwdadd
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+      #include "AutoLight.cginc"
+
+      fixed4 _Diffuse;
+      fixed4 _Specular;
+      float _Gloss;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldNormal : TEXCOORD0;
+        float3 worldPos : TEXCOORD1;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = UnityObjectToWorldNormal(v.normal);
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        // 计算漫反射部分
+        fixed3 worldNormal = normalize(i.worldNormal);
+        // +
+        #ifdef USING_DIRECTIONAL_LIGHT
+          fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz);
+        #else
+          fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz - i.worldPos.xyz);
+        #endif
+
+        fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * max(0, dot(worldNormal, worldLightDir));
+
+        fixed3 viewDir = normalize(_WorldSpaceCameraPos.xyz - i.worldPos.xyz);
+        fixed3 halfDir = normalize(worldLightDir + viewDir);
+        fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(max(0, dot(worldNormal, halfDir)), _Gloss);
+        // +
+        #ifdef USING_DIRECTIONAL_LIGHT
+          fixed atten = 1.0;
+        #else
+          float3 lightCoord = mul(unity_WorldToLight, float4(i.worldPos, 1)).xyz;
+          fixed atten = tex2D(_LightTexture0, dot(lightCoord, lightCoord).rr).UNITY_ATTEN_CHANNEL;
+        #endif
+        return fixed4((diffuse + specular) * atten, 1.0);
+      }
+      ENDCG
+    }
+  }
+
+  Fallback "Specular"
+}
+```
+
+### Unity 的光照衰减
+
+默认情况下，Unity 使用一张纹理作为查找表来在片元着色器中计算逐像素光照的衰减。**优点：**计算不依赖于数学公式的复杂性，只要使用一个参数值去纹理中采样即可。**缺点：**需要预处理得到采样纹理，纹理的大小也会影响衰减的精度，不方便也不直观。
+
+#### 用于光照衰减的纹理
+
+Unity 在内部使用一张名为 `_LightTexture0` 的纹理来计算光源衰减。需要注意的是，如果对该光源使用了 `cookie`，那么衰减查找纹理是 `_LightTextureB0`。`_LightTexture0` **对角线上的纹理颜色值**代表了在光源空间中不同位置的点的衰减值。
 
 ## 基础纹理
 
