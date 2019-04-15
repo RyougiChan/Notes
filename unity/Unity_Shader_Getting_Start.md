@@ -1816,7 +1816,228 @@ Shader "Unlit/Chapter9-ForwardRendering"
 
 #### 用于光照衰减的纹理
 
-Unity 在内部使用一张名为 `_LightTexture0` 的纹理来计算光源衰减。需要注意的是，如果对该光源使用了 `cookie`，那么衰减查找纹理是 `_LightTextureB0`。`_LightTexture0` **对角线上的纹理颜色值**代表了在光源空间中不同位置的点的衰减值。
+Unity 在内部使用一张名为 `_LightTexture0` 的纹理来计算光源衰减。如果对该光源使用了 `cookie`，那么衰减查找纹理是 `_LightTextureB0`。`_LightTexture0` **对角线上的纹理颜色值**代表了在光源空间中不同位置的点的衰减值。
+
+为了对 `_LigbtTexture0` 纹理采样得到给定点到该光源的衰减值，我们首先需要得到该点在光源空间中的位置。然后使用这个坐标的模的平方对衰减纹理进行采样，得到衰减值(使用宏 `UNITY_ATTEN_CHANNEL` 来得到衰减纹理中衰减值所在的分量)。
+
+```cs
+float3 lightCoord = mul(unity_WorldToLight, float4(i.worldPos, 1)).xyz;
+fixed atten = tex2D(_LightTexture0, dot(lightCoord, lightCoord).rr).UNITY_ATTEN_CHANNEL;
+```
+
+#### 使用数学公式计算衰减
+
+纹理采样的方法可以减少计算衰减时的复杂度，但有时希望可以在代码中利用公式
+来计算光源的衰减。可惜的是，Unity **没有**在文档中给出内置衮减计算的相关说明。
+
+### Unity 的阴影
+
+在实时渲染中，最常使用的是名为 `Shadow Map` 的技术。这种技术首先把摄像机的位置放在与光源重合的位置上，那么场景中该光源的阴影区域就是那些摄像机不可视区域。Unity 也是使用这种技术。Unity 使用 `LightMode` 标签被设为 `ShadowCaster` 的 Pass 来专门更新光源的阴影映射纹理(深度纹理)。Unity 首先把摄像机放置到光源的位置上，然后调用该 Pass，通过对顶点变换后得到光源空间下的位置，并据此来输出深度信息到阴影映射纹理中。
+
+- 物体接收来自其他物体的阴影，必须在 Shader 中对阴影映射纹理（包括屏幕空间的阴影图）进行采样，把采样结果和最后的光照结果相乘来产生阴影效果。
+- 物体向其他物体投射阴影，必须把该物体加入到光源的阴影映射纹理的计算中，从而让其他物体在对阴影映射纹理采样时可以得到该物体的相关信息。
+
+#### 传统的阴影映射纹理
+
+传统的阴影映射纹理的实现:
+
+- 在正常渲染的 Pass 中把顶点位置变换到光源空间下，得到它在光源空间中的三维位置信息。
+- 然后使用 `xy` 分量对阴影映射纹理进行采样，得到阴影映射纹理中该位置的深度信息。
+- 如果该深度值小于该顶点的深度值（通常由 `z` 分量得到），那么说明该点位于阴影中。
+
+#### 屏幕空间的阴影映射技术 (Screenspace Shadow Map)
+
+Unity 采用这种技术。屏幕空间的阴影映射原本是**延迟渲染**中产生阴影的方法。
+**并不是所有的平台 Unity 都会使用这种技术**，屏幕空间的阴影映射需要显卡支持MRT，而有些移动平台不支持这种特性。
+
+- Unity 首先会通过调用 `"LightMode"="ShadowCaster"` 的 Pass 来得到可投射阴影的光源的阴影映射纹理以及摄像机的深度纹理。
+- 然后根据光源的阴影映射纹理和摄像机的深度纹理来得到屏茄空间的阴影图。
+- 如果摄像机的深度图中记录的表面深度大于转换到阴影映射纹理中的深度值，就说明该表面虽然是可见的，但是却处于该光源的阴影中。
+
+#### 不透明物体的阴影
+
+- 让物体投射阴影
+
+> 内置 Shader `Normal-VertexLitshader` 内部实现的 `"LightMode"="ShadowCaster"` Pass。实际使用中通常通过 `Fallback` 间接使用
+
+```cs
+// Pass to render onject as a shadow caster
+Pass {
+  Name "ShadowCaster"
+  Tags { "LightMode" = "ShadowCaster" }
+
+  CGPROGRAM
+  #pragma vertex vert
+  #pragma fragment frag
+  #pragma multi_compile_shadowcaster
+  #include "UnityCG.cginc"
+
+  struct v2f {
+    V2F_SHADOW_CASTER;
+  }
+
+  v2f vert (appdata_base v)
+  {
+    v2f o;
+    TRANSFER_SHADOW_CASTER_NORMALOFFSET(o)
+    return o;
+  }
+
+  float4 frag (v2f i) : SV_Target
+  {
+    SHADOW_CASTER_FRAGMENT(i)
+  }
+  ENDCG
+}
+```
+
+- 让物体接收阴影
+
+`SHADOW_COORDS`、`TRANSFER_SHADOW` 和 `SHADOW_ATTENUATION` 是计算阴影时的三剑客。这些宏中会使用上下文变量来进行相关计算，为了能够让这些宏正确工作，我们需要保证自定义的变量名和这些宏中使用的变量名相匹配。我们需要保证：`a2f` 结构体中的顶点坐标变量名必须是 `vertex`，顶点着色器的输出结构体 `v2f` 必须命名为 `v`，且 `v2f`中的项点位置变量必须命名为 `pos`。
+
+```cs
+Shader "Unlit/Chapter9-Shadow"
+{
+  Properties {
+    _Diffuse ("Diffuse", Color) = (1, 1, 1, 1)
+    // 控制高光反射颜色
+    _Specular ("Specular", Color) = (1, 1, 1, 1)
+    // 控制高光区域的大小
+    _Gloss ("Gloss", Range(8.0, 256)) = 20
+  }
+
+  SubShader {
+    // Base Pass
+    Pass {
+      Tags { "LightMode" = "ForwardBase" }
+
+      CGPROGRAM
+      #pragma multi_compile_fwdbase
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+      // 计算阴影时所用的宏在这个文件中声明
+      #include "AutoLight.cginc"
+
+      fixed4 _Diffuse;
+      fixed4 _Specular;
+      float _Gloss;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldNormal : TEXCOORD0;
+        float3 worldPos : TEXCOORD1;
+        // 声明一个用于对阴影纹理采样的坐标
+        SHADOW_COORDS(2)
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = UnityObjectToWorldNormal(v.normal);
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        // 在顶点着色器中计算上一步中声明的阴影纹理坐标
+        TRANSFER_SHADOW(o);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        // 计算阴影值
+        fixed shadow = SHADOW_ATTENUATION(i);
+        // 计算漫反射部分
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+        fixed3 worldNormal = normalize(i.worldNormal);
+        fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz);
+        fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * saturate(dot(worldNormal, worldLightDir));
+        // 计算高光反射部分
+        fixed3 reflectDir = normalize(reflect(-worldLightDir, worldNormal));
+        fixed3 viewDir = normalize(_WorldSpaceCameraPos.xyz - i.worldPos.xyz);
+        fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(saturate(dot(reflectDir, viewDir)), _Gloss);
+        // 衰减，平行光没有衰减
+        fixed atten = 1.0;
+        return fixed4(ambient + (diffuse + specular) * shadow * atten, 1.0);
+      }
+      ENDCG
+    }
+    // Additional Pass
+    Pass {
+      Tags { "LightMode"="ForwardAdd" }
+      // 如果没有使用 Blend 命令的话，Additional Pass 会直接覆盖掉之前的光照结果。
+      Blend One One
+      CGPROGRAM
+      #pragma multi_compile_fwdadd
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+      #include "AutoLight.cginc"
+
+      fixed4 _Diffuse;
+      fixed4 _Specular;
+      float _Gloss;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldNormal : TEXCOORD0;
+        float3 worldPos : TEXCOORD1;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = UnityObjectToWorldNormal(v.normal);
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        // 计算漫反射部分
+        fixed3 worldNormal = normalize(i.worldNormal);
+        #ifdef USING_DIRECTIONAL_LIGHT
+          fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz);
+        #else
+          fixed3 worldLightDir = normalize(_WorldSpaceLightPos0.xyz - i.worldPos.xyz);
+        #endif
+
+        fixed3 diffuse = _LightColor0.rgb * _Diffuse.rgb * max(0, dot(worldNormal, worldLightDir));
+
+        fixed3 viewDir = normalize(_WorldSpaceCameraPos.xyz - i.worldPos.xyz);
+        fixed3 halfDir = normalize(worldLightDir + viewDir);
+        fixed3 specular = _LightColor0.rgb * _Specular.rgb * pow(max(0, dot(worldNormal, halfDir)), _Gloss);
+        // +
+        #ifdef USING_DIRECTIONAL_LIGHT
+          fixed atten = 1.0;
+        #else
+          float3 lightCoord = mul(unity_WorldToLight, float4(i.worldPos, 1)).xyz;
+          fixed atten = tex2D(_LightTexture0, dot(lightCoord, lightCoord).rr).UNITY_ATTEN_CHANNEL;
+        #endif
+        return fixed4((diffuse + specular) * atten, 1.0);
+      }
+      ENDCG
+    }
+  }
+
+  Fallback "Specular"
+}
+
+```
+
+- 同一管理光照衰减和阴影
+
+Unity 通过内置的 `UNITY_LIGHT_ATTENUATION` 宏来实现的
+
+#### 透明物体的阴影
 
 ## 基础纹理
 
