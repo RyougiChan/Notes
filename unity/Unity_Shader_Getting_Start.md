@@ -1325,7 +1325,7 @@ Shader "Unity Shaders Book/Chapter 6/Diffuse Vertex-Level" {
     }
   }
   Fallback "Diffuse"
-}__
+}
 ```
 
 #### 实现逐像素光照
@@ -2039,6 +2039,11 @@ Unity 通过内置的 `UNITY_LIGHT_ATTENUATION` 宏来实现的
 
 #### 透明物体的阴影
 
+对于大多数不透明物体来说， 把 `Fallback` 设为 `VertexLit` 就可以得到正确的阴影。但透明物体的 `Fallback` 设置需要格外小心。
+
+1. **透明度测试**：直接使用 `VertexLit`、`Diffuse`、`Specular` 等作为回调，往往无法得到正确的阴影，因为透明度测试需要在片元着色器中舍弃某些片元，而 `VertexLit` 中的阴影投射纹理并没有进行舍弃的操作。**这种情况需要使用 `Transparent/Cutout/VertexLit` 并提供 `_Cutoff` 属性，然后把物体的 MeshRenderer 组件中的 CastShadows 属性设置为 Two Sided, 强制 Unity 在计算阴影映射纹理时计算所有面的深度信息**
+2. **透明度混合**：这种方式实现的半透明物体不会参与深度图和阴影映射纹理的计算，也就是说，它们不会向其他物体投射阴影，也不会接收来自其他物体的阴影。这是由于透明度混合需要关闭深度写入，由此带来的问题也影响了阴影的生成。**这种情况可以通过把 `Fallback` 设置为 `VertexLit`、`Diffuse` 这些不透明物体使用的 Shader，然后设置物体的 Mesh Renderer 组件上的 Cast Shadows 和 Receive Shadows 选项来控制是否需要向其他物体投射或接收阴影(这种实现效果其实不太正确)**
+
 ## 基础纹理
 
 !!这里实现的 Shader 往往并不能直接应用到实际项目中!!
@@ -2552,6 +2557,37 @@ Shader "Unity Shaders Book/Chapter 7/Mask Texture" {
     }
   }
   Fallback "Specular"
+}
+```
+
+## 高级纹理
+
+### 立方体纹理
+
+在图形学中，**立方体纹理(Cubemap)**是**环境映射(Environment Mapping)**的一种方法。环境映射可以模拟物体周围的环境，使用了环境映射的物体可以看起来像镀了层金属一样反射出周围的环境。立方体纹理一共包含了**6 张图像**，对应立方体的 6 个面。
+
+使用立方体纹理的**优点**在于，它的实现简单快速，而且得到的效果也比较好。但它也有一些**缺点**，例如当场景中引入新的物体、光源，或者物体发生移动时，就需要重新生成立方体纹理。立方体纹理也仅可以反射环境，但不能反射使用了该立方体纹理的物体本身(立方体纹理不能模拟多次反射的结果，所以尽量对凸面体而不要对凹面体使用立方体纹理)。
+
+立方体纹理在实时渲染中有很多应用，最常见的是用于**天空盒子(Skybox)**以及**环境映射**。
+
+#### 用于环境映射的立方体纹理
+
+创建用于环境映射的立方体纹理有三种方法：
+
+- 直接有一些特殊布局的纹理创建（需要提供一张具有特殊布局的纹理，把该纹理的 Texture Type 设置为 Cubemap 即可，**官方推荐**这种做法，它可以对纹理数据进行压缩，同时支持边缘修正、光滑反射和 HDR 等功能）
+- 手动创建一个 Cubemap 资源，再赋予 6 张图给它
+- 脚本生成（通过利用 Unity 提供的 `Camera.RenderToCubemap` 函数来实现，这个函数可以把从任意位置观察到的场景图片存储到 6 张图像中，从而创建出该位置上的立方体纹理）关键代码如下：
+
+```cs
+void OnWizardCreate() {
+  // create temporary camera for rendering
+  GameObject go = new GameObject("CubemapCamera");
+  // place it on the object
+  go.AddComponent<Camera>();
+  // render into cubemap
+  go.transform.position = renderFromPosition.position;
+  // destroy temporary camera
+  DestroyImmdiate(go);
 }
 ```
 
