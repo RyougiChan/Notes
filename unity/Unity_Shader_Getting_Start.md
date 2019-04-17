@@ -2572,7 +2572,7 @@ Shader "Unity Shaders Book/Chapter 7/Mask Texture" {
 
 #### 用于环境映射的立方体纹理
 
-创建用于环境映射的立方体纹理有三种方法：
+通过这种方法，可以模拟出金属质感的材质。创建用于环境映射的立方体纹理有三种方法：
 
 - 直接有一些特殊布局的纹理创建（需要提供一张具有特殊布局的纹理，把该纹理的 Texture Type 设置为 Cubemap 即可，**官方推荐**这种做法，它可以对纹理数据进行压缩，同时支持边缘修正、光滑反射和 HDR 等功能）
 - 手动创建一个 Cubemap 资源，再赋予 6 张图给它
@@ -2582,14 +2582,306 @@ Shader "Unity Shaders Book/Chapter 7/Mask Texture" {
 void OnWizardCreate() {
   // create temporary camera for rendering
   GameObject go = new GameObject("CubemapCamera");
-  // place it on the object
   go.AddComponent<Camera>();
-  // render into cubemap
+  // place it on the object
   go.transform.position = renderFromPosition.position;
+  // render into cubemap
+  go.GetComponent<Camera>().RenderToCubemap(cubemap);
   // destroy temporary camera
   DestroyImmdiate(go);
 }
 ```
+
+#### 反射
+
+使用了反射效果的物体通常看起来就像镀了层金属。模拟反射只需要通过入射光线的方向和表面法线方向来计算反射方向，再利用反射方向对立方体纹理采样即可。
+
+```cs
+Shader "Unlit/Chapter10-Reflection"
+{
+  Properties {
+    _Color ("Color Tint", Color) = (1,1,1,1)
+    // 控制反射颜色
+    _ReflectColor ("Reflection Color", Color) = (1,1,1,1)
+    // 控制反射程度
+    _ReflectAmount ("Reflect Amount", Range(0,1)) = 1
+    // 模拟反射的环境映射纹理
+    _Cubemap ("Reflection Cubemap", Cube) = "_Skybox" {}
+  }
+
+  SubShader {
+    Tags { "RenderType"="Opaque" "Queue"="Geometry"}
+    Pass {
+      Tags { "LightMode" = "ForwardBase" }
+      CGPROGRAM
+      #pragma multi_compile_fwdbase
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+      #include "AutoLight.cginc"
+
+      fixed4 _Color;
+      fixed4 _ReflectColor;
+      fixed _ReflectAmount;
+      samplerCUBE _Cubemap;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+      }
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldPos : TEXCOORD0;
+        fixed3 worldNormal : TEXCOORD1;
+        fixed3 worldViewDir : TEXCOORD2;
+        fixed3 worldRefl : TEXCOORD3;
+        SHADOW_COORDS(4)
+      }
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = UnityObjectToWorldNormal(v.normal);
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        o.worldViewDir = UnityWorldSpaceViewDir(o.worldPos);
+        // Compute the reflect dir in world space
+        // 计算视角方向关于顶点法线的反射方向来求得入射光线的方向
+        // 也可以选择在片元着色器中计算，这样得到的效果更加细腻
+        o.worldRefl = reflect(-o.worldViewDir, o.worldNormal);
+        TRANSFER_SHADOW(o);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        fixed3 worldNormal = normalize(i.worldNormal);
+        fixed3 worldLightDir = normalize(i.worldLightDir);
+        fixed3 worldViewDir = normalize(i.worldViewDir);
+
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+        fixed3 diffuse = _LightColor0.rgb * _Color.rgb * saturate(dot(i.worldNormal, i.worldLightDir));
+        // Use the reflect dir in world space to access the cubemap
+        // 利用反射方向来对立方体纹理采样
+        fixed3 reflection = texCUBE(_Cubemap, i.worldRefl).rgb * _ReflectColor;
+
+        UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+
+        // Mix the diffuse color with the reflected color
+        fixed3 color = ambient + lerp(diffuse, reflection, _ReflectAmount) * atten;
+        return fixed4(color, 1.0);
+      }
+      ENDCG
+    }
+  }
+
+  FallBack "Reflective/VertexLit"
+}
+```
+
+#### 折射
+
+当给定入射角时，我们可以使用斯涅尔定律 (Snell's Law) 来计算折射射角。
+
+```cs
+// η1、η2 为两种介质的折射率
+// θ1、θ2 为入射光线和折射光线与法线的夹角
+η1 * sinθ1 = η2 * sinθ2
+```
+
+严格来讲，更准确的模拟方法需要计算两次折射(从外到内和从来内到外各一次)，但想要在实时渲染中模拟出第二次折射方向比较复杂，因此，在实时渲染中我们通常仅模拟第一次折射。实际的视觉效果也比较可靠。
+
+```cs
+Shader "Unlit/Chapter10-Refraction"
+{
+  Properties {
+    _Color ("Color Tint", Color) = (1,1,1,1)
+    _RefractColor ("Refraction Color", Color) = (1,1,1,1)
+    _RefractAmount ("Refraction Amount", Range(0,1)) = 1
+    _RefractRatio ("Refraction Ratio", Range(0.1,1)) = 0.5
+    _Cubemap ("Refraction Cubmap", Cube) = "Skybox" {}
+  }
+
+  SubShader {
+    Tags { "RenderType"="Opaque" "Queue"="Geometry" }
+    Pass {
+      Tags { "LightMode"="ForwardBase" }
+
+      CGPROGRAM
+      #pragma multi_compile_fwdbase
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+      #include "AutoLight.cginc"
+
+      fixed4 _Color;
+      fixed4 _RefractColor;
+      float _RefractAmount;
+      fixed _RefractRatio;
+      samplerCUBE _Cubemap;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldPos : TEXCOORD0;
+        fixed3 worldNormal : TEXCOORD1;
+        fixed3 worldViewDir : TEXCOORD2;
+        fixed3 worldRefr : TEXCOORD3;
+        SHADOW_COORDS(4)
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = UnityObjectToWorldNormal(v.normal);
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        o.worldViewDir = UnityWorldSpaceViewDir(o.worldPos);
+        // Compute the refract dir in world space
+        // refract 函数用来计算折射方向。
+        // 第一个参数即为入射光线的归一化方向，
+        // 第二个参数是归一化表面法线，
+        // 第三个参数是入射光线所在介质的折射率和折射光线所在介质的折射率之间的比值
+        o.worldRefr = refract(-normalize(o.worldViewDir), normalize(o.worldNormal), _RefractRatio);
+
+        TRANSFER_SHADOW(o);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        fixed3 worldNormal = normalize(i.worldNormal);
+        fixed3 worldLightDir = normalize(UnityWorldSpaceLightDir(i.worldPos));
+        fixed3 worldViewDir = normalize(i.worldViewDir);
+
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+
+        fixed3 diffuse = _LightColor0.rgb * _Color.rgb * saturate(dot(worldNormal, worldLightDir));
+
+        // Use the refract dir in world space to access the cubemap
+        // 使用折射方向对立方体纹理进行采样
+        // 没有对 i.worldRefr 进行归一化操作，因为对立方体纹理的采样只需要提供方向
+        fixed3 refraction = texCUBE(_Cubemap, i.worldRefr).rgb * _RefractColor.rgb;
+
+        UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+
+        // Mix the diffuse color with refract color
+        fixed3 color = ambient + lerp(diffuse, refraction, _RefractAmount) * atten;
+        return fixed4(color, 1.0);
+      }
+
+      ENDCG
+    }
+  }
+  FallBack "Reflective/VertexLit"
+}
+
+```
+
+#### 菲涅耳反射
+
+**菲涅耳反射(Fresnelreflection)**描述了一种光学现象，即当光线照射到物体表面上时，一部分发生反射，一部分进入物体内部，发生折射或散射。被反射的光和入射光之间存在一定的比率关系，这个比率关系可以通过菲涅耳等式进行计算。经常会使用菲涅耳反射来根据视角方向控制反射程度。由于菲涅尔反射的计算非常复杂，通常会采用近似公式计算：
+
+**_Schlick菲涅耳近似等式_**
+
+```cs
+// F0 反射系数，用于控制菲涅耳反射的强度
+// v 是视角方向，n 是表面法线
+F[schlick(v,n)] = F0 + (1 - F0)(1 - v·n)^5
+```
+
+```cs
+Shader "Unlit/Chapter10-Fresnel"
+{
+  Properties {
+    _Color ("Color Tint", Color) = (1,1,1,1)
+    _FresnelScale ("Frenel Scale", Range(0,1)) = 0.5
+    _Cubemap ("Reflection Cubemap", Cube) = "Skybox" {}
+  }
+
+  SubShader {
+    Tags { "RenderType"="Opaque" "Queue"="Geometry" }
+
+    Pass {
+      Tags { "LightMode"="ForwardBase" }
+
+      CGPROGRAM
+      #pragma multi_compile_fwdbase
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "Lighting.cginc"
+      #include "AutoLight.cginc"
+
+      fixed4 _Color;
+      fixed _FresnelScale;
+      samplerCUBE _Cubemap;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+      };
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float3 worldPos : TEXCOORD0;
+        fixed3 worldNormal : TEXCOORD1;
+        fixed3 worldViewDir : TEXCOORD2;
+        fixed3 worldRefl : TEXCOORD3;
+        SHADOW_COORDS(4)
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.worldNormal = UnityObjectToWorldNormal(v.normal);
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        o.worldViewDir = UnityWorldSpaceViewDir(o.worldPos);
+        o.worldRefl = reflect(-o.worldViewDir, o.worldNormal);
+        TRANSFER_SHADOW(o);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        fixed3 worldNormal = normalize(i.worldNormal);
+        fixed3 worldLightDir = normalize(UnityWorldSpaceLightDir(i.worldPos));
+        fixed3 worldViewDir = normalize(i.worldViewDir);
+
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
+
+        UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+
+        fixed3 reflection = texCUBE(_Cubemap, i.worldRefl).rgb;
+
+        fixed fresnel = _FresnelScale + (1 - _FresnelScale) * pow(1 - dot(worldViewDir, worldNormal), 5);
+
+        fixed3 diffuse = _LightColor0.rgb * _Color.rgb * saturate(dot(worldNormal, worldLightDir));
+
+        fixed3 color = ambient + lerp(diffuse, reflection, saturate(fresnel)) * atten;
+
+        return fixed4(color, 1.0);
+      }
+      ENDCG
+    }
+  }
+  Fallback "Reflective/VertexLit"
+}
+```
+
+**_Empricial菲涅耳近似等式_**
+
+```cs
+// bias、scale、power 是控制项
+F[Empricial(v,n)] = max(0, min(1, bias + scale x (1 - v·n)^power))
+```
+
+### 渲染纹理
+
+现代的 GPU 允许我们把整个三维场景渲染到一个中间缓冲中，即**渲染目标纹理(Render Target Texture, RTT)**，而不是传统的帧缓冲或后备缓冲(back buffer)。与之相关的是**多重渲染目标(Multiple Render Target, MRT)**，这种技术指的是GPU允许我们把场景同时渲染到多个渲染目标纹理中，而不再需要为每个渲染目标纹理单独渲染完整的场景。延迟渲染就是使用多重渲染目标的一个应用。Unity 为渲染目标纹理定义了一种专门的纹理类型 —— **渲染纹理(Render Texture)**。
+
+
 
 ## 透明效果
 
