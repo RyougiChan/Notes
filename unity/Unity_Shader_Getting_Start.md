@@ -2881,7 +2881,196 @@ F[Empricial(v,n)] = max(0, min(1, bias + scale x (1 - v·n)^power))
 
 现代的 GPU 允许我们把整个三维场景渲染到一个中间缓冲中，即**渲染目标纹理(Render Target Texture, RTT)**，而不是传统的帧缓冲或后备缓冲(back buffer)。与之相关的是**多重渲染目标(Multiple Render Target, MRT)**，这种技术指的是GPU允许我们把场景同时渲染到多个渲染目标纹理中，而不再需要为每个渲染目标纹理单独渲染完整的场景。延迟渲染就是使用多重渲染目标的一个应用。Unity 为渲染目标纹理定义了一种专门的纹理类型 —— **渲染纹理(Render Texture)**。
 
+**_在 Unity 中使用渲染纹理通常有两种方式：_**
 
+1. 在Project 目录下创建一个渲染纹理，然后把某个摄像机的渲染目标设置成该渲染纹理，这样一来该摄像机的渲染结果就会实时更新到渲染纹理中，而不会显示在屏幕上(这种方式可以选择渲染纹理的分辨率、滤波模式等纹理属性)。
+2. 在屏幕后处理时使用 `GrabPass` 命令或 `OnRenderlmage` 函数来获取当前屏幕图像，Unity 会把这个屏幕图像放到一张和屏幕分辨率等同的渲染纹理中，然后可以在自定义的 Pass 中把它们当成普通的纹理来处理，从而实现各种屏幕特效。
+
+#### 镜子效果
+
+1. 创建一个摄像机(Camera)，并调整它的位置、裁剪平面、视角等，使得它的显示图像是我们希望的镜子图像。
+2. 创建一个渲染纹理(Render Texture)并赋予 Camera 的 Target Texture
+3. 创建一个材质 Material 和一个 Shader(代码如下)，并将 Shader 赋给 Material
+4. 创建一个四边形 Quad 并赋予其 Material
+
+```cs
+Shader "Unlit/Chapter10-Mirror"
+{
+  Properties {
+    _MainTex ("Main Tex", 2D) = "white" {}
+  }
+  SubShader {
+    Tags { "RenderType"="Opaque" "Queue"="Geometry"}
+
+    Pass {
+      CGPROGRAM
+
+      #pragma vertex vert
+      #pragma fragment frag
+
+      sampler2D _MainTex;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 texcoord : TEXCOORD0;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float2 uv : TEXCOORD0;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+
+        o.uv = v.texcoord;
+        // Mirror needs to filp x
+        o.uv.x = 1 - o.uv.x;
+
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        return tex2D(_MainTex, i.uv);
+      }
+
+      ENDCG
+    }
+  }
+   FallBack Off
+}
+```
+
+#### 玻璃效果
+
+通常会使用 **GrabPass** 来实现诸如玻璃等透明材质的模拟，与使用简单的透明混合不同，使用 GrabPass 可以让我们对该物体后面的图像进行更复杂的处理，例如使用法线来模拟折射效果，而不再是简单的和原屏幕颜色进行混合。在 Shader 中定义了一个 GrabPass 后，Unity 会把当前屏幕的图像绘制在一张纹理中，以便我们在后续的 Pass 中访问它。
+
+!! 使用 GrabPass 时往往需要把物体的渲染队列设置成透明队列（即`"Queue"="Transparent"`)，这样才可以保证当渲染该物体时，所有的不透明物体都已经被绘制在屏幕上，从而获取正确的屏幕图像。
+
+1. 使用一张法线纹理来修改模型的法线信息
+2. 通过一个 Cubemap 来模拟玻璃的**反射**
+3. 使用 GrabPass 获取玻璃后面的屏幕图像，并使用切线空间下的法线对屏幕纹理坐标偏移后，再对屏幕图像进行采样来模拟近似的**折射**
+
+```cs
+Shader "Unlit/Chapter10-GlassRefraction"
+{
+  Properties
+  {
+    _MainTex ("Main Tex", 2D) = "white" {}
+    _BumpMap ("Normal Map", 2D) = "bump" {}
+    _Cubemap ("Enviroment CubeMap", Cube) = "_Skybox" {}
+    _Distortion ("Distortion", Range(0,100)) = 10
+    _RefractAmount ("Refract Amount", Range(0.0, 1.0)) = 1.0
+  }
+  SubShader
+  {
+    // Queue设置成 Transparent 可以确保该物体渲染时，
+    // 其他所有不透明物体都已经被渲染到屏幕上了，否则就可能无法正确得到 “透过玻璃看到的图像“。
+    // 设置 RenderType 则是为了在使用着色器替换 (Shader Replacement) 时，
+    // 该物体可以在需要时被正确渲染。 
+    Tags { "Queue"="Transparent" "RenderType"="Opaque" }
+
+    // "_RefractionTex" 字符串内部的名称决定了抓取得到的屏幕图像将会被存入哪个纹理中
+    // 可以省略声明该字符串，但直接声明纹理名称的方法往往可以得到更高的性能
+    GrabPass { "_RefractionTex" }
+
+    Pass
+    {
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "UnityCG.cginc"
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+        float4 tangent : TANGENT; 
+        float2 texcoord: TEXCOORD0;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float4 scrPos : TEXCOORD0;
+        float4 uv : TEXCOORD1;
+        float4 TtoW0 : TEXCOORD2;  
+          float4 TtoW1 : TEXCOORD3;  
+          float4 TtoW2 : TEXCOORD4; 
+      };
+
+      sampler2D _MainTex;
+      float4 _MainTex_ST;
+      sampler2D _BumpMap;
+      float4 _BumpMap_ST;
+      samplerCUBE _Cubemap;
+      float _Distortion;
+      fixed _RefractAmount;
+      // _RefractionTex 和 _RefractionTex_TexelSize 对应了在使用 GrabPass 时指定的纹理名称
+      sampler2D _RefractionTex;
+      // _RefractionTex_TexelSize 可以让我们得到该纹理的纹素大小
+      float4 _RefractionTex_TexelSize;
+      v2f vert (a2v v)
+      {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        // ComputeGrabScreenPos 函数用来得到对应被抓取的屏幕图像的采样坐标
+        o.scrPos = ComputeGrabScreenPos(o.pos);
+        o.uv.xy = TRANSFORM_TEX(v.texcoord, _MainTex);
+        o.uv.zw = TRANSFORM_TEX(v.texcoord, _BumpMap);
+
+        float3 worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+        fixed3 worldNormal = UnityObjectToWorldNormal(v.normal);
+        fixed3 worldTangent = UnityObjectToWorldDir(v.tangent.xyz);
+        // 把法线方向从切线空间（由法线纹理采样得到）变换到世界空间下
+        fixed3 worldBinormal = cross(worldNormal, worldTangent) * v.tangent.w;
+
+        o.TtoW0 = float4(worldTangent.x, worldBinormal.x, worldNormal.x, worldPos.x);  
+        o.TtoW1 = float4(worldTangent.y, worldBinormal.y, worldNormal.y, worldPos.y);  
+        o.TtoW2 = float4(worldTangent.z, worldBinormal.z, worldNormal.z, worldPos.z);  
+
+        return o;
+      }
+      fixed4 frag (v2f i) : SV_Target
+      {
+        float3 worldPos = float3(i.TtoW0.w, i.TtoW1.w, i.TtoW2.w);
+        fixed3 worldViewDir = normalize(UnityWorldSpaceViewDir(worldPos));
+
+        // Get the normal in tangent space
+        fixed3 bump = UnpackNormal(tex2D(_BumpMap, i.uv.zw));  
+
+        // Compute the offset in tangent space
+        // 对屏幕图像的采样坐标进行偏移，模拟折射效果
+        float2 offset = bump.xy * _Distortion * _RefractionTex_TexelSize.xy;
+        i.scrPos.xy = offset * i.scrPos.z + i.scrPos.xy;
+        // 对 scrPos 透视除法得到真正的屏幕坐标
+        // 并使用该坐标对抓取的屏幕图像 _RefractionTex 进行采样，得到模拟的折射颜色。
+        fixed3 refrCol = tex2D(_RefractionTex, i.scrPos.xy/i.scrPos.w).rgb;
+
+        // Convert the normal to world space
+        bump = normalize(half3(dot(i.TtoW0.xyz, bump), dot(i.TtoW1.xyz, bump), dot(i.TtoW2.xyz, bump)));
+        fixed3 reflDir = reflect(-worldViewDir, bump);
+        fixed4 texColor = tex2D(_MainTex, i.uv.xy);
+        // 使用反射方向对 Cubemap 进行采样，并把结果和主纹理颜色相乘后得到反射颜色。
+        fixed3 reflCol = texCUBE(_Cubemap, reflDir).rgb * texColor.rgb;
+
+        fixed3 finalColor = reflCol * (1 - _RefractAmount) + refrCol * _RefractAmount;
+
+        return fixed4(finalColor, 1);
+      }
+      ENDCG
+    }
+  }
+  Fallback "Diffuse"
+}
+
+```
+
+#### 渲染纹理与 GrabPass 比较
+
+GrabPass 和渲染纹理+额外摄像机的方式都可以抓取屏幕图像。GrabPass 的好处在于实现简单。从效率上来讲，使用渲染纹理的效率往往要好于 GrabPass, 尤其在移动设备上。
+
+使用渲染纹理我们可以自定义渲染纹理的大小，尽管这种方法需要把部分场景再次渲染 遍，但我们可以通过调整摄像机的渲染层来减少二次渲染时的场景大小，或使用其他方法来控制摄像机是否需要开启。而使用 GrabPass 获取到的图像分辨率和显示屏幕是一致的，这意味着在某些高分辨率的设备上可能会造成严重的带宽影响。在移动设备上，GrabPass 虽然不会重新渲染场景，但它往往需要 CPU 直接读取后备缓冲 (back buffer) 中的数据，破坏了 CPU 和 GPU 之间的并行性，比较耗时，甚至在些移动设备上不支持。
 
 ## 透明效果
 
