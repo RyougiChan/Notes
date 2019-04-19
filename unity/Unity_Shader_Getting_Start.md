@@ -2444,7 +2444,7 @@ Shader "Unity Shader Book/Chapter 6/Ramp Texture"
         fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz;
         // 使用半兰伯特模型纹理采样
         fixed halfLambert = 0.5 * dot(worldNormal, worldLightDir) + 0.5;
-        fixed3 diffuseColor = tex2D(_RampTex, fixed2(halfLambert, halfLambert)).rgb * _Color.rgb;
+        fixed3 diffuseColor = te x2D(_RampTex, fixed2(halfLambert, halfLambert)).rgb * _Color.rgb;
 
         fixed3 diffuse = _LightColor0.rgb * diffuseColor;
 
@@ -2968,7 +2968,7 @@ Shader "Unlit/Chapter10-GlassRefraction"
     // Queue设置成 Transparent 可以确保该物体渲染时，
     // 其他所有不透明物体都已经被渲染到屏幕上了，否则就可能无法正确得到 “透过玻璃看到的图像“。
     // 设置 RenderType 则是为了在使用着色器替换 (Shader Replacement) 时，
-    // 该物体可以在需要时被正确渲染。 
+    // 该物体可以在需要时被正确渲染。
     Tags { "Queue"="Transparent" "RenderType"="Opaque" }
 
     // "_RefractionTex" 字符串内部的名称决定了抓取得到的屏幕图像将会被存入哪个纹理中
@@ -2986,7 +2986,7 @@ Shader "Unlit/Chapter10-GlassRefraction"
       struct a2v {
         float4 vertex : POSITION;
         float3 normal : NORMAL;
-        float4 tangent : TANGENT; 
+        float4 tangent : TANGENT;
         float2 texcoord: TEXCOORD0;
       };
 
@@ -2996,7 +2996,7 @@ Shader "Unlit/Chapter10-GlassRefraction"
         float4 uv : TEXCOORD1;
         float4 TtoW0 : TEXCOORD2;  
           float4 TtoW1 : TEXCOORD3;  
-          float4 TtoW2 : TEXCOORD4; 
+          float4 TtoW2 : TEXCOORD4;
       };
 
       sampler2D _MainTex;
@@ -3072,6 +3072,14 @@ GrabPass 和渲染纹理+额外摄像机的方式都可以抓取屏幕图像。G
 
 使用渲染纹理我们可以自定义渲染纹理的大小，尽管这种方法需要把部分场景再次渲染 遍，但我们可以通过调整摄像机的渲染层来减少二次渲染时的场景大小，或使用其他方法来控制摄像机是否需要开启。而使用 GrabPass 获取到的图像分辨率和显示屏幕是一致的，这意味着在某些高分辨率的设备上可能会造成严重的带宽影响。在移动设备上，GrabPass 虽然不会重新渲染场景，但它往往需要 CPU 直接读取后备缓冲 (back buffer) 中的数据，破坏了 CPU 和 GPU 之间的并行性，比较耗时，甚至在些移动设备上不支持。
 
+### 程序纹理
+
+**程序纹理(Procedural Texture)**指的是那些由计算机生成的图像，我们通常使用一些特定的算法来创建个性化图案或非常真实的自然元素，例如木头、石子等。使用程序纹理的好处在千我们可以使用各种参数来控制纹理的外观，而这些属性不仅仅是那些颜色属性，甚至可以是完全不同类型的图案属性，这使得我们可以得到更加丰富的动画和视觉效果。
+
+#### Unity的程序材质
+
+程序材质和它使用的程序纹理并不是在Unity中创建的，而是使用一个名为 `Substance Designer` 的软件在 Unity 外部创建的以 `.sbsar` 为后缀的文件。
+
 ## 透明效果
 
 在 Unity 中，通常使用两种方法来实现透明效果：第一种是使用**透明度测试(Alpha Test)**，这种方法其实**无法真正得到**半透明效果；另一种是**透明度混合(Alpha Blending)**。
@@ -3080,7 +3088,7 @@ GrabPass 和渲染纹理+额外摄像机的方式都可以抓取屏幕图像。G
 
 在实时渲染中，深度缓冲用于解决可见性(visibility)问题，它可以决定哪个物体的哪些部分会被渲染在前面，而哪些部分会被其他物体遮挡。它的**基本思想**是根据深度缓存中的值来判断该片元距离摄像机的距离，当渲染一个片元时，需要把它的深度值和已经存在于深度缓冲中的值进行比较（如果开启了深度测试），如果它的值距离摄像机更远，那么说明这个片元不应该被渲染到屏幕上（有物体挡住了它）；否则，这个片元应该覆盖掉此时颜色缓冲中的像素值，并把它的深度值更新到深度缓冲中（如果开启了深度写入）。
 
-当使用透明度混合时，深度写入CZWrite)是关闭的。
+当使用透明度混合时，深度写入(CZWrite)是关闭的。
 
 ### 透明度测试
 
