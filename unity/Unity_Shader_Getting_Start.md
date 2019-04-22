@@ -3429,3 +3429,95 @@ Pass {
   ...
 }
 ```
+
+## Unity Shader 动画
+
+### Unity Shader 中的内置时间变量
+
+| 名称 | 类型 | 描述 |
+| --- | --- | --- |
+| _Time | float4 | t 是自该场景加载开始所经过的时间，4 个分量的值分别是 `(t/20, t, 2t, 3t)`。 |
+| _SinTime | float4 | t 是时间的正弦值，4 个分量的值分别是 `(t/8, t/4, t/2, t)` |
+| _CosTime | float4 | t 是时间的正弦值，4 个分量的值分别是 `(t/8, t/4, t/2, t)` |
+| unity_DeltaTime | float4 | dt 是时间增量，4 个分量的值分别是 `(dt, 1/dt, smoothDt, 1/smoothDt)` |
+
+### 纹理动画
+
+纹理动画在游戏中的应用非常广泛。尤其在各种资源都比较局限的移动平台上，往往会使用纹理动画来代替复杂的粒子系统等模拟各种动画效果。
+
+#### 序列帧动画
+
+序列帧动画的**原理**：依次播放一系列关键帧图像，当播放速度达到一定数值时，看起来就是一个连续的动画。**优点**：灵活性很强，不需要进行任何物理计算就可以得到非常细腻的动画效果。**缺点**：序列帧中每张关键帧图像都不一样，要制作一张出色的序列帧纹理所需要的美术工程量比较大。
+
+```cs
+Shader "Unlit/Chapter11-ImageSequenceAnimation"
+{
+  Properties {
+    _Color ("Color Tint", Color) = (1,1,1,1)
+    _MainTex ("Image Sequence", 2D) = "white" {}
+    _HorizontalAmount ("Horizontal Amount", Float) = 8
+    _VerticalAmount ("Vertical Amount", Float) = 8
+    _Speed ("Speed", Range(1, 100)) = 30
+  }
+  SubShader {
+    Tags { "Queue" = "Transparent" "IgnoreProjector" = "True" "RenderType" = "Transparent" }
+
+    Pass {
+      Tags { "LightMode" = "ForwardBase" }
+
+      ZWrite Off
+      Blend SrcAlpha OneMinusSrcAlpha
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "UnityCG.cginc"
+
+      fixed4 _Color;
+      sampler2D _MainTex;
+      float4 _MainTex_ST;
+      float _HorizontalAmount;
+      float _VerticalAmount;
+      float _Speed;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float2 uv : TEXCOORD0;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float2 uv : TEXCOORD0;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.uv = TRANSFORM_TEX(v.uv, _MainTex);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        float time = floor(_Time.y * _Speed);
+        float row = floor(time / _HorizontalAmount);
+        float column = time - row * _VerticalAmount;
+
+        half2 uv = i.uv + half2(column, -row);
+        uv.x /= _HorizontalAmount;
+        uv.y /= _VerticalAmount;
+
+        fixed4 c = tex2D(_MainTex, uv);
+        c.rgb *= _Color;
+        return c;
+      }
+
+      ENDCG
+    }
+  }
+  FallBack "Transparent/VertexLit"
+}
+
+```
+
+#### 滚动的背景
