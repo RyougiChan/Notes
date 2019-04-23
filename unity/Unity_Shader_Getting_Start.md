@@ -3521,3 +3521,92 @@ Shader "Unlit/Chapter11-ImageSequenceAnimation"
 ```
 
 #### 滚动的背景
+
+利用内置的 `_Time.y` 变量在水平方向上对纹理坐标进行偏移，以此达到滚动的效果。
+
+```cs
+Shader "Unlit/Chapter11-ScrollingBackground"
+{
+  Properties
+  {
+    _MainTex ("Base Layer (RGB)", 2D) = "white" {}
+    _DetailTex ("2nd Layer (RGB)", 2D) = "white" {}
+    _ScrollX ("Base Layer Scroll Speed", Float) = 1.0
+    _Scroll2X ("2nd Layer Scroll Speed", Float) = 1.0
+    // 控制纹理的整体亮度
+    _Multiplier ("Layer Multiplier", Float) = 1
+  }
+  SubShader
+  {
+    Tags { "RenderType"="Opaque" "Queue"="Geometry"}
+
+    Pass
+    {
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      #include "UnityCG.cginc"
+
+      struct appdata
+      {
+        float4 vertex : POSITION;
+        float4 uv : TEXCOORD0;
+      };
+
+      struct v2f
+      {
+        float4 vertex : SV_POSITION;
+        float4 uv : TEXCOORD0;
+      };
+
+      sampler2D _MainTex;
+      float4 _MainTex_ST;
+      sampler2D _DetailTex;
+      float4 _DetailTex_ST;
+      float _ScrollX;
+      float _Scroll2X;
+      float _Multiplier;
+
+      v2f vert (appdata v)
+      {
+        v2f o;
+        o.vertex = UnityObjectToClipPos(v.vertex);
+        o.uv.xy = TRANSFORM_TEX(v.uv, _MainTex) + frac(float2(_ScrollX, 0.0) * _Time.y);
+        o.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex) + frac(float2(_Scroll2X, 0.0) * _Time.y);
+        return o;
+      }
+
+      fixed4 frag (v2f i) : SV_Target
+      {
+        // sample the texture
+        fixed4 firstLayer = tex2D(_MainTex, i.uv.xy);
+        fixed4 secondLayer = tex2D(_DetailTex, i.uv.zw);
+        // 使用第二层纹理的透明通道来混合两张纹理
+        fixed4 c = lerp(firstLayer, secondLayer, secondLayer.a);
+        c.rgb *= _Multiplier;
+
+        return c;
+      }
+      ENDCG
+    }
+  }
+  Fallback "VertexLit"
+}
+```
+
+### 顶点动画
+
+顶点动画通常用来模拟旗帜飘动、水流流动等效果。
+
+#### 水流流动
+
+原理通常是使用**正弦函数**等来模拟水流的波动效果。
+
+#### 广告牌技术(Billboarding)
+
+广告牌技术会根据视角方向来**旋转**一个被纹理着色的多边形（通常就是简单的四边形，这个多边形就是广告牌），使得多边形看起来好像总是面对着摄像机。其本质就是构建**旋转矩阵**[广告牌技术使用的基向量通常是**表面法线(normal)**、**指向上的方向(up)**以及**指向右的方向(right)，还需要指定一个固定的锚点(anchor location)**]。广告牌技术被用于很多场景，比如渲染烟雾、云朵、闪光效果等。
+
+广告牌技术的难点在于，如何根据需求来构建3个相互正交的基向量。基向量计算过程如下：
+
+1. 通过初始计算得到目标的表面法线（例如就是视角方向）和指向上的方向。两者往往是不垂直的，但两者其中之一是固定的【如当模拟草丛时， 我们希望广告牌的指向上的方向永远是 `(0, 1, 0)`, 而法线方向应该随视角变化；而当模拟粒子效果时，我们希望广告牌的法线方向是固定的，即总是指向视角方向，指向上的方向则可以发生变化】
+2. 假设法线方向固定，根据初始的表面法线和指向上的方向来计算(叉积)出目标方向的指向右的方向 `right = up x normal`，对其归一化后，再由法线方向和指向右的方向计算出正交的指向上的方向 `up' = normal x right`
