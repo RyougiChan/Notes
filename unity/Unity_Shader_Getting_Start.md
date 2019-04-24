@@ -3610,3 +3610,138 @@ Shader "Unlit/Chapter11-ScrollingBackground"
 
 1. 通过初始计算得到目标的表面法线（例如就是视角方向）和指向上的方向。两者往往是不垂直的，但两者其中之一是固定的【如当模拟草丛时， 我们希望广告牌的指向上的方向永远是 `(0, 1, 0)`, 而法线方向应该随视角变化；而当模拟粒子效果时，我们希望广告牌的法线方向是固定的，即总是指向视角方向，指向上的方向则可以发生变化】
 2. 假设法线方向固定，根据初始的表面法线和指向上的方向来计算(叉积)出目标方向的指向右的方向 `right = up x normal`，对其归一化后，再由法线方向和指向右的方向计算出正交的指向上的方向 `up' = normal x right`
+
+```cs
+Shader "Unlit/Chapter11-Billboard"
+{
+  Properties
+  {
+    _MainTex ("Main Texture", 2D) = "white" {}
+    _Color ("Color Tint", Color) = (1,1,1,1)
+    // 用于调整是固定法线还是固定指向上的方向，即约束垂直方向的程度
+    _VerticalBillboarding ("Vertical BillBoarding", Range(0, 1)) = 1
+  }
+  SubShader
+  {
+    Tags { "Queue"="Transparent" "IgnoreProjector"="True" "RenderType"="Transparent" "DisableBatching"="True" }
+
+    Pass
+    {
+      Tags { "LightMode"="ForwardBase" }
+      ZWrite Off
+      Blend SrcAlpha OneMinusSrcAlpha
+      Cull Off
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "UnityCG.cginc"
+
+      struct appdata
+      {
+        float4 vertex : POSITION;
+        float2 uv : TEXCOORD0;
+      };
+
+      struct v2f
+      {
+        float2 uv : TEXCOORD0;
+        float4 vertex : SV_POSITION;
+      };
+
+      sampler2D _MainTex;
+      float4 _MainTex_ST;
+      fixed4 _Color;
+      fixed _VerticalBillboarding;
+
+      v2f vert (appdata v)
+      {
+        v2f o;
+        // 选择模型空间的原点作为广告牌的锚点
+        float3 center = float3(0,0,0);
+        // 获取模型空间下的视角位置
+        float3 viewer = mul(unity_ObjectToWorld, float4(_WorldSpaceCameraPos, 1));
+        // 计算三个正交矢量
+        // 目标法线方向
+        float3 normalDir = viewer - center;
+        // 当 _VerticalBillboarding 为 1 时，意味着法线方向固定为视角方向；当 _VerticalBillboarding 为 0 时，意味着向上方向固定为 (0, 1, 0)
+        normalDir.y = normalDir.y * _VerticalBillboarding;
+        normalDir = normalize(normalDir);
+        // 粗略的向上方向
+        // 防止法线方向和向上方向平行
+        float3 upDir = abs(normalDir.y) > 0.999 ? float3(0,0,1) : float3(0,1,0);
+        // 向右方向
+        float3 rightDir = normalize(cross(upDir, normalDir));
+        upDir = normalize(cross(normalDir, rightDir));
+        /// 重新计算顶点位置
+        float3 centerOffs = v.vertex.xyz - center;
+        float3 localPos = center + rightDir * centerOffs.x + upDir * centerOffs.y + normalDir.z * centerOffs.z;
+        o.vertex = UnityObjectToClipPos(float4(localPos, 1));
+        return o;
+      }
+
+      fixed4 frag (v2f i) : SV_Target
+      {
+        // sample the texture
+        fixed4 col = tex2D(_MainTex, i.uv);
+        col.rgb *= _Color.rgb;
+        return col;
+      }
+      ENDCG
+    }
+  }
+  Fallback "Transparent/VertexLit"
+}
+
+```
+
+#### 顶点动画注意事项
+
+- 批处理往往会破坏这种动画效果，可以通过 `SubShader` 的 `DisableBatching` 标签来强制取消对该 UnityShader 的批处理。然而，取消批处理会带来一定的性能下降，增加了Draw Call，因此应该尽量避免使用模型空间下的一些绝对位置和方向来进行计算(在广告牌的例子中，为了避免显式使用模型空间的中心来作为铀点，可以利用顶点颜色来存储每个顶点到错点的距离值)。
+- 如果想要对包含了顶点动画的物体添加阴影，得不到正确的阴影效果(投影错误)，此时需要提供自定义的 `ShadowCaster Pass`，如下带代码。阴影投射的重点在于需要按正常Pass的处理来剔除片元或进行顶点动画，以便阴影可以和物体正常渲染的结果相匹配。
+
+```cs
+Pass {
+  Tags { "LightMode"="ShadowCaster" }
+  CGPROGRAM
+
+  #pragma vertex vert
+  #pragma fragment frag
+  #pragma multi_compile_shadowcaster
+
+  #include "UnityCG.cginc"
+
+  float _Magnitude;
+  float _Frequency;
+  float _InvWaveLength;
+  float _Speed;
+
+  struct a2v {
+    float4 vertex : POSITION;
+    float4 texcoord : TEXCOORD0;
+  };
+
+  struct v2f {
+    V2F_SHADOW_CASTER;
+  };
+
+  v2f vert(a2v v) {
+    v2f o;
+    float4 offset;
+
+    offset.yzw = float3(0,0,0);
+    offset.x = sin(_Frequency * _Time.y + v.vertex.x * _InvWaveLength + v.vertex.y * _InvWaveLength + v.vertex.z * _InvWaveLength) * _Magnitude;
+    v.vertex += offset;
+
+    TRANSFER_SHADOW_CASTER_NORMALOFFSET(o)
+
+    return o;
+  }
+
+  fixed4 frag(v2f i) : SV_Target {
+    SHADOW_CASTER_FRAGMENT(i)
+  }
+  ENDCG
+}
+```
