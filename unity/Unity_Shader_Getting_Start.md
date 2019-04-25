@@ -3745,3 +3745,33 @@ Pass {
   ENDCG
 }
 ```
+
+## 屏幕后处理效果
+
+**屏幕后处理**，通常指的是在渲染完整个场景得到屏幕图像后，再对这个图像进行一系列操作，实现各种屏幕特效。使用这种技术，可以为游戏画面添加更多的艺术效果，例如景深 (Depth of Field) 、运动模糊 (Motion Blur) 等。
+
+实现屏幕后处理的基础在于得到渲染后的屏幕图像，即抓取屏幕，Unity 提供了一个接口 `OnRenderImage` 函数。当我们在脚本中声明此函数后，Unity 会把当前渲染得到的图像存储在第一个参数对应的源渲染纹理中，通过函数中的操作后再把目标渲染纹理(即第二个参数对应的渲染纹理)显示到屏幕上。
+
+在默认情况下，`OnRenderImage` 函数会在所有的不透明和透明的 Pass执行完毕后被调用，以便对场景中所有游戏对象都产生影响。
+
+```cs
+MonoBehaviour.OnRenderImage (RenderTexture src, RenderTexture dest)
+```
+
+在 `OnRenderImage` 函数中，通常是利用 `Graphics.Blit` 函数来完成对渲染纹理的处理。若希望不对透明物体产生任何影响，可在 `OnRenderImage` 函数前添加 `ImageEffectOpaque` 属性来实现。
+
+```cs
+/// src 源纹理，这个参数通常是当前屏幕的渲染纹理或是上一步处理后得到的渲染纹理
+/// desc 目标渲染纹理，如果它的值为 null 就会直接将结果显示在屏幕上
+public static void Blit(Texture src, RenderTexture dest);
+/// mat 材质，这个材质使用的 Unity Shader 将会进行各种屏幕后处理操作，src 纹理将会被传递给 Shader 中名为 _MainTex 的纹理属性
+/// pass 的默认值为 -1, 指定依次调用 Shader 内的所有 Pass
+public static void Blit(Texture src, RenderTexture dest, Material mat, int pass = -1);
+public static void Blit(Texture src, Material mat, int pass = -1);
+```
+
+_**在 Unity 中实现屏幕后处理效果**_
+
+- 在进行屏幕后处理之前，需要检查一系列条件是否满足，例如当前平台是否支持渲染纹理和屏幕特效，是否支持当前使用的 Unity Shader 等。
+- 在摄像中添加用于屏幕后处理的脚本。在脚本中实现 `OnRenderImage` 函数来获取当前屏幕的渲染纹理。
+- 调用 `Graphics.Blit` 函数使用特定的 Unity Shader 来对当前图像进行处理，再把返回的渲染纹理显示到屏幕上（复杂的屏幕特效可能需要多次调用 `Graphics.Blit` 函数）。
