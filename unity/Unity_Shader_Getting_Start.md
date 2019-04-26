@@ -3772,6 +3772,347 @@ public static void Blit(Texture src, Material mat, int pass = -1);
 
 _**在 Unity 中实现屏幕后处理效果**_
 
-- 在进行屏幕后处理之前，需要检查一系列条件是否满足，例如当前平台是否支持渲染纹理和屏幕特效，是否支持当前使用的 Unity Shader 等。
+- 在进行屏幕后处理之前，需要检查一系列条件是否满足，例如当前平台是否支持渲染纹理和屏幕特效，是否支持当前使用的 Unity Shader 等，示例代码如下。
 - 在摄像中添加用于屏幕后处理的脚本。在脚本中实现 `OnRenderImage` 函数来获取当前屏幕的渲染纹理。
 - 调用 `Graphics.Blit` 函数使用特定的 Unity Shader 来对当前图像进行处理，再把返回的渲染纹理显示到屏幕上（复杂的屏幕特效可能需要多次调用 `Graphics.Blit` 函数）。
+
+```cs
+using UnityEngine;
+using System.Collections;
+
+// 编辑模式下也可以执行该脚本
+[ExecuteInEditMode]
+// 所有屏幕后处理效果都需要绑定在某个摄像机上
+[RequireComponent (typeof(Camera))]
+/// <summary>
+/// 在进行屏幕后处理之前，需要检查一系列条件是否满足
+/// <summary>
+public class PostEffectsBase : MonoBehaviour {
+
+  // Called when start
+  // 提前检查各种资源和条件是否满足
+  protected void CheckResources() {
+    bool isSupported = CheckSupport();
+
+    if (isSupported == false) {
+      NotSupported();
+    }
+  }
+
+  // Called in CheckResources to check support on this platform
+  protected bool CheckSupport() {
+    if (SystemInfo.supportsImageEffects == false || SystemInfo.supportsRenderTextures == false) {
+      Debug.LogWarning("This platform does not support image effects or render textures.");
+      return false;
+    }
+
+    return true;
+  }
+
+  // Called when the platform doesn't support this effect
+  protected void NotSupported() {
+    enabled = false;
+  }
+  
+  protected void Start() {
+    CheckResources();
+  }
+
+  // Called when need to create the material used by this effect
+  protected Material CheckShaderAndCreateMaterial(Shader shader, Material material) {
+    if (shader == null) {
+      return null;
+    }
+
+    if (shader.isSupported && material && material.shader == shader)
+      return material;
+
+    if (!shader.isSupported) {
+      return null;
+    }
+    else {
+      material = new Material(shader);
+      material.hideFlags = HideFlags.DontSave;
+      if (material)
+        return material;
+      else
+        return null;
+    }
+  }
+}
+```
+
+### 调整亮度、饱和度、对比度
+
+创建一个继承自 `PostEffectsBase` 的脚本 `BrightnessSaturationAndContrast`
+
+```cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class BrightnessSaturationAndContrast : PostEffectsBase {
+
+  public Shader briSatConShader;
+  private Material briSatConMaterial;
+  public Material material {
+    get {
+      briSatConMaterial = CheckShaderAndCreateMaterial(briSatConShader, briSatConMaterial);
+      return briSatConMaterial;
+    }
+  }
+  [Range(0.0f, 3.0f)]
+  public float brightness = 1.0f;
+  
+  [Range(0.0f, 3.0f)]
+  public float saturation = 1.0f;
+  
+  [Range(0.0f, 3.0f)]
+  public float contrast = 1.0f;
+
+  void OnRenderImage(RenderTexture src, RenderTexture dest)
+  {
+    if(null != material)
+    {
+      material.SetFloat("_Brightness", brightness);
+      material.SetFloat("_Saturation", saturation);
+      material.SetFloat("_Contrast", contrast);
+      Graphics.Blit(src, dest, material);
+    }
+    else
+    {
+      Graphics.Blit(src, dest);
+    }
+  }
+}
+```
+
+编写 Shader 并应用在脚本上
+
+```cs
+Shader "Unlit/BrightnessSaturationAndContrast"
+{
+  Properties
+  {
+    // 必须叫 _MainTex, 供 Graphics.Blit(src, dest, material) 用
+    _MainTex ("Main Texture", 2D) = "white" {}
+    _Brightness ("Brightness", Float) = 1
+    _Saturation ("Saturation", Float) = 1
+    _Contrast ("Contrast", Float) = 1
+  }
+  SubShader
+  {
+    Pass {
+      // 屏幕后处理标配设置
+      ZTest Always Cull Off ZWrite Off
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+
+      #include "unityCG.cginc"
+
+      sampler2D _MainTex;
+      half _Brightness;
+      half _Saturation;
+      half _Contrast;
+
+      struct v2f {
+        float4 pos : POSITION;
+        half2 uv : TEXCOORD;
+      };
+
+      v2f vert(appdata_img v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.uv = v.texcoord;
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        fixed4 renderTex = tex2D(_MainTex, i.uv);
+        // 应用亮度参数
+        float3 finalColor = renderTex.rgb * _Brightness;
+        // 应用饱和度参数
+        /// 计算该像素对应的亮度值 (lumjnance)
+        fixed luminance = 0.2125 * renderTex.r + 0.7154 * renderTex.g + 0.0721 * renderTex.b;
+        fixed3 luminanceColor =fixed3(luminance,luminance,luminance);
+        finalColor = lerp(luminanceColor, finalColor, _Saturation);
+        // 应用对比度
+        fixed3 avgColor = fixed3(0.5,0.5,0.5);
+        finalColor = lerp(avgColor,finalColor,_Contrast);
+        return fixed4(finalColor, renderTex.a);
+      }
+      ENDCG
+    }
+  }
+
+  FallBack Off
+}
+```
+
+### 边缘检测
+
+边缘检测的原理是利用一些边缘检测算子对图像进行**卷积 (convolution)**操作。
+
+#### 卷积
+
+在图像处理中，**卷积**操作指的就是使用一个**卷积核 (kernel)** 对一张图像中的每个像素进行一系列操作。卷积核通常是一个四方形网格结构（例如 2x2、 3x3 的方形区域），该区域内每个方格都有一个权重值。当对图像中的某个像素进行卷积时，我们会把卷积核的中心放置于该像素上，翻转核之后再依次计算核中每个元素和其覆盖的图像像素值的乘积并求和，得到的结果就是该位置的新像素值。可以实现很多常见的图像处理效果， 例如**图像模糊**、**边缘检测**等。
+
+![卷积核与卷积](http://static.zybuluo.com/candycat/dvch7lp9z5d9rp4o0c1edjep/convolution.png)
+
+#### 边缘检测算子
+
+> 3 种常见的边缘检测算子(都包含了两个方向的卷积核，分别用于检测水平方向和竖直方向上的边缘信息)
+
+![3种常见的边缘检测算子](http://static.zybuluo.com/candycat/bm2nnarbl2h6fmmjq1gsfb7c/edge_detection_kernel.png)
+
+在进行边缘检测时，需要对每个像素分别进行一次卷积计算，得到两个方向上的梯度值 `Gx` 和 `Gy`, 而整体的梯度可按下面的公式计算而得。可以据此来判断哪些像素对应了边缘（梯度值越大，越有可能是边缘点）。
+
+```cs
+G = sqrt(Gx^2 + Gy^2)
+
+// 计算包含了开根号操作，出于性能的考虑，有时会使用绝对值操作来代替开根号操作
+G = |Gx| + |Gy|
+```
+
+> 示例代码
+
+```cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class EdgeDetection : PostEffectsBase {
+  public Shader edgeDetectShader; 
+  private Material edgeDetectMaterial = null; 
+  public Material material { 
+    get {
+      edgeDetectMaterial = CheckShaderAndCreateMaterial(edgeDetectShader,edgeDetectMaterial);
+      return edgeDetectMaterial;
+    }
+  }
+  [Range(0.0f,1.0f)]
+  public float edgesOnly = 0.0f;
+  public Color edgeColor = Color.black;
+  public Color backgroundColr = Color.white;
+
+  void OnRenderImage(RenderTexture src, RenderTexture dest)
+  {
+    if(null != material) {
+      material.SetFloat("_EdgeOnly", edgesOnly);
+      material.SetColor("_EdgeColor", edgeColor);
+      material.SetColor("_BackgroundColor", backgroundColr);
+      Graphics.Blit(src, dest, material);
+    } else {
+      Graphics.Blit(src, dest);
+    }
+  }
+}
+```
+
+```cs
+Shader "Unlit/EdgeDetection"
+{
+  Properties
+  {
+    _MainTex ("Main Texture", 2D) = "white" {}
+    _EdgeOnly ("Edge Only", Float) = 1.0
+    _EdgeColor ("Edge Color", Color) = (0,0,0,1)
+    _BackgroundColor ("Background Color", Color) = (1,1,1,1)
+  }
+  SubShader
+  {
+    Pass
+    {
+      ZTest Always Cull Off ZWrite Off
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment fragSobel
+
+      #include "UnityCG.cginc"
+
+      struct appdata
+      {
+        float4 vertex : POSITION;
+        half2 uv : TEXCOORD0;
+      };
+
+      struct v2f
+      {
+        half2 uv[9] : TEXCOORD0;
+        float4 vertex : SV_POSITION;
+      };
+
+      sampler2D _MainTex;
+      half4 _MainTex_TexelSize;
+      fixed _EdgeOnly;
+      fixed4 _EdgeColor;
+      fixed4 _BackgroundColor;
+
+      v2f vert (appdata v)
+      {
+        v2f o;
+        o.vertex = UnityObjectToClipPos(v.vertex);
+        half2 uv = v.uv;
+        // 9 的纹理数组值对应了使用 Sobel 算子采样时需要的 9 个邻域纹理坐标
+        // 把计算采样纹理坐标的代码从片元着色器中转移到顶点着色器中，可以减少运算，提高性能
+        o.uv[0] = uv + _MainTex_TexelSize.xy * half2(-1, -1);
+        o.uv[1] = uv + _MainTex_TexelSize.xy * half2(0, -1);
+        o.uv[2] = uv + _MainTex_TexelSize.xy * half2(1, -1);
+        o.uv[3] = uv + _MainTex_TexelSize.xy * half2(-1, 0);
+        o.uv[4] = uv + _MainTex_TexelSize.xy * half2(0, 0);
+        o.uv[5] = uv + _MainTex_TexelSize.xy * half2(1, 0);
+        o.uv[6] = uv + _MainTex_TexelSize.xy * half2(-1, 1);
+        o.uv[7] = uv + _MainTex_TexelSize.xy * half2(0, 1);
+        o.uv[8] = uv + _MainTex_TexelSize.xy * half2(1, 1);
+        return o;
+      }
+
+      fixed luminance(fixed4 color) {
+        return  0.2125 * color.r + 0.7154 * color.g + 0.0721 * color.b; 
+      }
+
+      half Sobel(v2f i) {
+        // 定义了水平方向和竖直方向使用的卷积核 Gx 和 Gy
+        const half Gx[9] = {
+          -1,  0,  1,
+          -2,  0,  2,
+          -1,  0,  1
+        };
+        const half Gy[9] = {
+          -1, -2, -1,
+          0,  0,  0,
+          1,  2,  1
+        };
+
+        half texColor;
+        half edgeX = 0;
+        half edgeY = 0;
+        // 依次对9个像素进行采样，计算它们的亮度值，
+        // 再与卷积核Gx和Gy中对应的权重相乘后，叠加到各自的梯度值上
+        for (int it = 0; it < 9; it++) {
+          texColor = luminance(tex2D(_MainTex, i.uv[it]));
+          edgeX += texColor * Gx[it];
+          edgeY += texColor * Gy[it];
+        }
+        // 从1中减去水平方向和竖直方向的梯度值的绝对值，得到edge
+        half edge = 1 - abs(edgeX) - abs(edgeY);
+        
+        return edge;
+      }
+      
+      fixed4 fragSobel (v2f i) : SV_Target
+      {
+        half edge = Sobel(i); 
+        fixed4 withEdgeColor = lerp(_EdgeColor, tex2D(_MainTex, i.uv[4]), edge);
+        fixed4 onlyEdgeColor = lerp(_EdgeColor, _BackgroundColor, edge); 
+        return lerp(withEdgeColor, onlyEdgeColor, _EdgeOnly); 
+      }
+      ENDCG
+    }
+  }
+  FallBack Off
+}
+```
