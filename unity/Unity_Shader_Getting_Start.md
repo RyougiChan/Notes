@@ -3984,9 +3984,9 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class EdgeDetection : PostEffectsBase {
-  public Shader edgeDetectShader; 
-  private Material edgeDetectMaterial = null; 
-  public Material material { 
+  public Shader edgeDetectShader;
+  private Material edgeDetectMaterial = null;
+  public Material material {
     get {
       edgeDetectMaterial = CheckShaderAndCreateMaterial(edgeDetectShader,edgeDetectMaterial);
       return edgeDetectMaterial;
@@ -4099,20 +4099,44 @@ Shader "Unlit/EdgeDetection"
         }
         // 从1中减去水平方向和竖直方向的梯度值的绝对值，得到edge
         half edge = 1 - abs(edgeX) - abs(edgeY);
-        
+
         return edge;
       }
-      
+
       fixed4 fragSobel (v2f i) : SV_Target
       {
         half edge = Sobel(i); 
         fixed4 withEdgeColor = lerp(_EdgeColor, tex2D(_MainTex, i.uv[4]), edge);
-        fixed4 onlyEdgeColor = lerp(_EdgeColor, _BackgroundColor, edge); 
-        return lerp(withEdgeColor, onlyEdgeColor, _EdgeOnly); 
+        fixed4 onlyEdgeColor = lerp(_EdgeColor, _BackgroundColor, edge);
+        return lerp(withEdgeColor, onlyEdgeColor, _EdgeOnly);
       }
       ENDCG
     }
   }
   FallBack Off
 }
+```
+
+### 高斯模糊
+
+**高斯模糊**是卷积的另一个常见应用，它使用的卷积核名为**高斯核**，高斯核是一个正方形大小的滤波核，其中每个元素的计算都是基于下面的高斯方程：
+
+要构建一个高斯核，只需要计算高斯核中各个位置对应的高斯值。为了保证滤波后的图像不
+会变暗，需要对高斯核中的权重进行归一化，即让每个权重除以所有权重的和，这样可以保
+证所有权重的和为1。
+
+高斯核的维数越高，模糊程度越大。使用一个 `NxN` 的高斯核对图像进行卷积滤波，就需要 `NxNxWxH` (W 和H分别是图像的宽和高)次纹理采样。当 `N` 的大小不断增加时，采样次数会变得非常巨大。可以把这个二维高斯函数拆分成两个一维函数，可以使用两个一维高斯核先后对图像进行滤波，采样次数只需要 `2xNxWxH`，优化性能的同时得到同样的效果。
+
+![一个5x5大小的高斯核。左图显示了标准方差为 1 的高斯核的权重分布，我们可以把这个二维高斯核拆分成两个一维的高斯核(右)](http://static.zybuluo.com/candycat/qdi1a1gaicihr3tju2acbcdc/gaussian_kernel.png)
+
+高斯方程很好地模拟了邻域每个像素对当前处理像素的影响程度：距离越近，影响越大。
+
+```cs
+// σ是标准方差（一般取值为1)
+// x和y 分别对应了当前位置到卷积核中心的整数距离
+G(x,y) = (1/2πσ^2)e^[-(x^2+y^2)/(2σ^2)]
+```
+
+```cs
+
 ```
