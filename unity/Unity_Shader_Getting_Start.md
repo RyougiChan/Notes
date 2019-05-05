@@ -4071,7 +4071,7 @@ Shader "Unlit/EdgeDetection"
       }
 
       fixed luminance(fixed4 color) {
-        return  0.2125 * color.r + 0.7154 * color.g + 0.0721 * color.b; 
+        return  0.2125 * color.r + 0.7154 * color.g + 0.0721 * color.b;
       }
 
       half Sobel(v2f i) {
@@ -4105,7 +4105,7 @@ Shader "Unlit/EdgeDetection"
 
       fixed4 fragSobel (v2f i) : SV_Target
       {
-        half edge = Sobel(i); 
+        half edge = Sobel(i);
         fixed4 withEdgeColor = lerp(_EdgeColor, tex2D(_MainTex, i.uv[4]), edge);
         fixed4 onlyEdgeColor = lerp(_EdgeColor, _BackgroundColor, edge);
         return lerp(withEdgeColor, onlyEdgeColor, _EdgeOnly);
@@ -4137,6 +4137,363 @@ Shader "Unlit/EdgeDetection"
 G(x,y) = (1/2πσ^2)e^[-(x^2+y^2)/(2σ^2)]
 ```
 
-```cs
+> GaussianBlur.cs 代码
 
+```cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class GaussianBlur : PostEffectsBase {
+
+  public Shader gaussianBlurShader;
+  private Material gaussianBlurMaterial = null;
+  public Material material {
+    get {
+      gaussianBlurMaterial = CheckShaderAndCreateMaterial(gaussianBlurShader, gaussianBlurMaterial);
+      return gaussianBlurMaterial;
+    }
+  }
+  // 模糊迭代次数
+  [Range(0, 4)]
+  public int iterations = 3;
+  // 模糊范围控制
+  [Range(0.2f, 3.0f)]
+  public float blurSpread = 0.6f;
+  // 缩放系数
+  [Range(1, 8)]
+  public int downSample = 2;
+
+  void OnRenderImage(RenderTexture src, RenderTexture dest) {
+    if(null != material) {
+      /*****************1st****************
+      int rtW = src.width;
+      int rtH = src.height;
+      // 分配一块与屏幕大小相同的缓冲区
+      RenderTexture buffer = RenderTexture.GetTemporary(rtW, rtH, 0);
+      // 使用竖直方向的一维高斯核进行滤波并将结果存储在 buffer 中
+      Graphics.Blit(src, buffer, material, 0);
+      // 使用水平方向的一维高斯核进行滤波对 buffer 进行处理得到屏幕图像
+      Graphics.Blit(buffer, dest, material, 1);
+      // 释放缓存
+      RenderTexture.ReleaseTemporary(buffer);
+      *************************************/
+      // 对图像进行降采样
+      // !!过大的 downSample 可能会造成图像像素化
+      int rtW = src.width / downSample;
+      int rtH = src.height / downSample;
+      // 把 src 中的图像缩放后存储到 buffer0 中
+      RenderTexture buffer0 = RenderTexture.GetTemporary(rtW, rtH, 0);
+      // 将临时渲染纹理的滤波模式设为双线性
+      buffer0.filterMode = FilterMode.Bilinear;
+
+      Graphics.Blit(src, buffer0);
+      for (int i = 0; i < iterations; i++)
+      {
+        material.SetFloat("_BlurSize", 1.0f + i * blurSpread);
+        RenderTexture buffer1 = RenderTexture.GetTemporary(rtW, rtH, 0);
+        Graphics.Blit(buffer0, buffer1, material, 0);
+        RenderTexture.ReleaseTemporary(buffer0);
+
+        buffer0 = buffer1;
+        buffer1 = RenderTexture.GetTemporary(rtW, rtH, 0);
+
+        Graphics.Blit(buffer0, buffer1, material, 1);
+        RenderTexture.ReleaseTemporary(buffer0);
+        buffer0 = buffer1;
+      }
+      Graphics.Blit(buffer0, dest);
+      RenderTexture.ReleaseTemporary(buffer0);
+    } else {
+      Graphics.Blit(src, dest);
+    }
+  }
+}
+```
+
+```cs
+Shader "Unlit/Chapter12-GaussianBlur"
+{
+  Properties
+  {
+    _MainTex ("Texture", 2D) = "white" {}
+    // 控制不同迭代之间高斯模糊的模糊区域范围
+    _BlurSize ("Blur Size", Float) = 1.0
+  }
+  SubShader
+  {
+    // CGINCLUDE类似于 C++ 中头文件的功能
+    // 高斯模糊需要定义两个 Pass, 但它们使用的片元着色器代码完全相同
+    // 使用CGINCLUDE可以避免我们编写两个完全一样的 frag 函数。
+    CGINCLUDE
+
+    #include "UnityCG.cginc"
+
+    sampler2D _MainTex;
+    // 计算相邻像素的纹理坐标偏移量以得到相邻像素的纹理坐标
+    half4 _MainTex_TexelSize;
+    float _BlurSize;
+
+    struct v2f {
+      float4 pos : SV_POSITION;
+      half2 uv[5] : TEXCOORD0;
+    };
+    // 竖直方向的顶点着色器
+    // 用 5x5 大小的高斯核对原图像进行高斯模糊
+    v2f vertBlurVertical(appdata_img v) {
+      v2f o;
+      o.pos = UnityObjectToClipPos(v.vertex);
+      half2 uv = v.texcoord;
+
+      o.uv[0] = uv;
+      // 在高斯核维数不变的情况下，_BlurSize 越大，模糊程度越高，但采样数却不会受到影响
+      // !!过大的_BlurSize 值会造成虚影
+      o.uv[1] = uv + float2(0.0, _MainTex_TexelSize.y * 1.0) * _BlurSize;
+      o.uv[2] = uv - float2(0.0, _MainTex_TexelSize.y * 1.0) * _BlurSize;
+      o.uv[3] = uv + float2(0.0, _MainTex_TexelSize.y * 2.0) * _BlurSize;
+      o.uv[4] = uv - float2(0.0, _MainTex_TexelSize.y * 2.0) * _BlurSize;
+
+      return o;
+    }
+    // 水平方向的顶点着色器
+    v2f vertBlurHorizontal(appdata_img v) {
+      v2f o;
+      o.pos = UnityObjectToClipPos(v.vertex);
+
+      half2 uv = v.texcoord;
+
+      o.uv[0] = uv;
+      o.uv[1] = uv + float2(_MainTex_TexelSize.x * 1.0, 0.0) * _BlurSize;
+      o.uv[2] = uv - float2(_MainTex_TexelSize.x * 1.0, 0.0) * _BlurSize;
+      o.uv[3] = uv + float2(_MainTex_TexelSize.x * 2.0, 0.0) * _BlurSize;
+      o.uv[4] = uv - float2(_MainTex_TexelSize.x * 2.0, 0.0) * _BlurSize;
+
+      return o;
+    }
+    fixed4 fragBlur(v2f i) : SV_Target {
+      // 5x5 的二维高斯核可以拆分成两个大小为 5 的一维高斯核
+      // 由于它的对称性，只需要记录 3 个高斯权重
+      float weight[3] = { 0.4026, 0.2442, 0.0545 };
+      fixed3 sum = tex2D(_MainTex, i.uv[0]).rgb * weight[0];
+      for (int it = 1; it < 3; it++) {
+        sum += tex2D(_MainTex, i.uv[it]).rgb * weight[it];
+        sum += tex2D(_MainTex, i.uv[2*it]).rgb * weight[it];
+      }
+      return fixed4(sum, 1.0);
+    }
+    ENDCG
+
+    ZTest Always Cull Off ZWrite Off
+
+    Pass {
+      // 为 Pass 定义名字，可以在其他 Shader 中直接通过它们的名字来使用该 Pass, 而不需要再重复编写代码
+      NAME "GAUSSIAN_BLUR_VERTICAL"
+
+      CGPROGRAM
+
+      #pragma vertex vertBlurVertical;
+      #pragma fragmemt fragBlur;
+
+      ENDCG
+    }
+
+    Pass {
+      NAME "GAUSSIAN_BLUR_HORIZONTAL"
+
+      CGPROGRAM
+
+      #pragma vertex vertBlurHorizontal;
+      #pragma fragmemt fragBlur;
+
+      ENDCG
+    }
+  }
+  FallBack "Diffuse"
+}
+```
+
+### Bloom 效果
+
+模拟真实摄像机的一种图像效果，让画面中较亮的区域 _扩散_ 到周围的区域中，造成一种朦胧的效果。
+
+> 实现原理
+
+- 根据一个阈值提取出图像中的较亮区域，把它们存储在一张渲染纹理中
+- 利用高斯模糊对上面得到的渲染纹理进行模糊处理，模拟扩散光线的效果
+- 将模拟扩散效果与原图混合，得到最终效果
+
+> Bloom.cs 脚本的代码与 GaussianBlur.cs 基本一致，只增加了一个新的参数 `luminanceThreshold` 来控制提取较亮区域时使用的阈值
+
+```cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class Bloom : PostEffectsBase
+{
+    public Shader bloomShader;
+    private Material bloomMaterial = null;
+    public Material material
+    {
+        get
+        {
+            bloomMaterial = CheckShaderAndCreateMaterial(bloomShader, bloomMaterial);
+            return bloomMaterial;
+        }
+    }
+    // 模糊迭代次数
+    [Range(0, 4)]
+    public int iterations = 3;
+    // 模糊范围控制
+    [Range(0.2f, 3.0f)]
+    public float blurSpread = 0.6f;
+    // 缩放系数
+    [Range(1, 8)]
+    public int downSample = 2;
+    // 控制提取较亮区域时使用的阈值
+    [Range(0.0f, 4.0f)]
+    public float luminanceThreshold = 0.6f;
+    void OnRenderImage(RenderTexture src, RenderTexture dest)
+    {
+        if (null != material)
+        {
+            material.SetFloat("_LuminanceThreshold", luminanceThreshold);
+
+            // 对图像进行降采样
+            // !!过大的 downSample 可能会造成图像像素化
+            int rtW = src.width / downSample;
+            int rtH = src.height / downSample;
+            // 把 src 中的图像缩放后存储到 buffer0 中
+            RenderTexture buffer0 = RenderTexture.GetTemporary(rtW, rtH, 0);
+            // 将临时渲染纹理的滤波模式设为双线性
+            buffer0.filterMode = FilterMode.Bilinear;
+            // 使用 Shader 中的第一个 Pass 提取图像中的较亮区域并存储在 buffer0 中
+            Graphics.Blit(src, buffer0, material, 0);
+            // 高斯模糊迭代使用第二个和第三个 Pass
+            for (int i = 0; i < iterations; i++)
+            {
+                material.SetFloat("_BlurSize", 1.0f + i * blurSpread);
+                RenderTexture buffer1 = RenderTexture.GetTemporary(rtW, rtH, 0);
+
+                // Render the vertical pass
+                Graphics.Blit(buffer0, buffer1, material, 1);
+
+                RenderTexture.ReleaseTemporary(buffer0);
+                buffer0 = buffer1;
+                buffer1 = RenderTexture.GetTemporary(rtW, rtH, 0);
+
+                // Render the horizontal pass
+                Graphics.Blit(buffer0, buffer1, material, 2);
+
+                RenderTexture.ReleaseTemporary(buffer0);
+                buffer0 = buffer1;
+            }
+            // 使用第四个 Pass 进行最终混合
+            material.SetTexture("_Bloom", buffer0);
+            Graphics.Blit(src, dest, material, 3);
+            RenderTexture.ReleaseTemporary(buffer0);
+        }
+        else
+        {
+            Graphics.Blit(src, dest);
+        }
+    }
+}
+```
+
+> Shader 代码
+
+```cs
+Shader "Unlit/Chapter12-Bloom"
+{
+  Properties
+  {
+    _MainTex ("Base (RGB)", 2D) = "white" {}
+    // 高斯模糊后的较亮区域
+    _Bloom ("Bloom (RGB)", 2D) = "black" {}
+    // 用于提取较亮区域使用的阈值
+    _LuminanceThreshold ("Luminance Threshold", Float) = 0.5
+    // 控制不同迭代之间高斯模糊的模糊区域范围
+    _BlurSize ("Blur Size", Float) = 1.0
+  }
+  SubShader
+  {
+    CGINCLUDE
+    #include "UnityCG.cginc"
+
+    sampler2D _MainTex;
+    half4 _MainTex_TexelSize;
+    sampler2D _Bloom;
+    float _LuminanceThreshold;
+    float _BlurSize;
+    /// 提取较亮区域需要使用的顶点着色器和片元着色器
+    struct v2f {
+      float4 pos : SV_POSITION;
+      half2 uv : TEXCOORD0;
+    };
+
+    v2f vertExtractBright(appdata_img v) {
+      v2f o;
+      o.pos = UnityObjectToClipPos(v.vertex);
+      o.uv = v.texcoord;
+      return o;
+    }
+
+    fixed luminance(fixed4 color) {
+      return 0.2125 * color.r + 0.7154 * color.g + 0.00721 * color.b;
+    }
+
+    fixed4 fragExtractBright(v2f i) : SV_Target {
+      fixed4 c = tex2D(_MainTex, i.uv);
+      // 采样到的亮度值减去阈值，截取 0-1 之间
+      fixed val = clamp(luminance(c) - _LuminanceThreshold, 0.0, 1.0);
+      // 返回提取后的亮部区域
+      return c * val;
+    }
+
+    /// 混合亮部图像和原图像时使用的顶点着色器和片元着色器
+    struct v2fBloom {
+      float4 pos : SV_POSITION;
+      half4 uv : TEXCOORD0;
+    };
+
+    v2fBloom vertBloom(appdata_img v) {
+      v2fBloom o;
+      o.pos = UnityObjectToClipPos(v.vertex);
+      o.uv.xy = v.texcoord;
+      o.uv.zw = v.texcoord;
+
+      #if UNITY_UV_STARTS_AT_TOP
+      if(_MainTex_TexelSize.y < 0) {
+        o.uv.w = 1.0 - o.uv.w;
+      }
+      #endif
+      return o;
+    }
+    fixed4 fragBloom(v2fBloom i) : SV_Target {
+      return tex2D(_MainTex, i.uv.xy) + tex2D(_Bloom, i.uv.zw);
+    }
+    ENDCG
+    ZTest Always Cull Off ZWrite Off
+
+    Pass {
+      CGPROGRAM
+      #pragma vertex vertExtractBright
+      #pragma fragment fragExtractBright
+      ENDCG
+    }
+    // 使用高斯模糊定义的 Pass
+    UsePass "Unlit/Chapter12-GaussianBlur/GAUSSIAN_BLUR_VERTICAL"
+
+    UsePass "Unlit/Chapter12-GaussianBlur/GAUSSIAN_BLUR_HORIZONTAL"
+
+    Pass {
+      CGPROGRAM
+      #pragma vertex vertBloom
+      #pragma fragment fragBloom
+      ENDCG
+    }
+  }
+  FallBack Off
+}
 ```
