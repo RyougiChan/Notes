@@ -3074,7 +3074,7 @@ GrabPass 和渲染纹理+额外摄像机的方式都可以抓取屏幕图像。G
 
 ### 程序纹理
 
-**程序纹理(Procedural Texture)**指的是那些由计算机生成的图像，我们通常使用一些特定的算法来创建个性化图案或非常真实的自然元素，例如木头、石子等。使用程序纹理的好处在千我们可以使用各种参数来控制纹理的外观，而这些属性不仅仅是那些颜色属性，甚至可以是完全不同类型的图案属性，这使得我们可以得到更加丰富的动画和视觉效果。
+**程序纹理(Procedural Texture)**指的是那些由计算机生成的图像，我们通常使用一些特定的算法来创建个性化图案或非常真实的自然元素，例如木头、石子等。使用程序纹理的好处在于我们可以使用各种参数来控制纹理的外观，而这些属性不仅仅是那些颜色属性，甚至可以是完全不同类型的图案属性，这使得我们可以得到更加丰富的动画和视觉效果。
 
 #### Unity的程序材质
 
@@ -3747,6 +3747,8 @@ Pass {
 ```
 
 ## 屏幕后处理效果
+
+[Post-processing overview](https://docs.unity3d.com/Manual/PostProcessingOverview.html)
 
 **屏幕后处理**，通常指的是在渲染完整个场景得到屏幕图像后，再对这个图像进行一系列操作，实现各种屏幕特效。使用这种技术，可以为游戏画面添加更多的艺术效果，例如景深 (Depth of Field) 、运动模糊 (Motion Blur) 等。
 
@@ -4497,3 +4499,46 @@ Shader "Unlit/Chapter12-Bloom"
   FallBack Off
 }
 ```
+
+### 动态模糊
+
+如果在摄像机曝光时，拍摄场景发生了变化，就会产生模糊的画面。实现方法有两种：
+
+- **累积缓存**：利用一块累积缓存 (accumulation buffer) 来混合多张连续的图像。当物体快速移动产生多张图像后，我们取它们之间的平均值作为最后的运动模糊图像。这种暴力的方法对**性能的消耗很大**。
+- **速度缓存**：创建和使用速度缓存 (velocity buffer)，这个缓存中存储了各个像素当前的运动速度，然后利用该值来决定模糊的方向和大小。这种方法应用更广泛。
+
+## 深度纹理和法线纹理
+
+### 获取深度纹理和法线纹理
+
+深度纹理存储的像素值不是颜色值，而是一个高精度(深度纹理的精度通常是 24位或16位，这取决于使用的深度缓存的精度。)的**深度值**，深度值来自于顶点变换后得到的**归一化的设备坐标 (Normalized Device Coordinates, NDC)**。深度值范围是 `[0, 1]`,而且通常是非线性分布的。
+
+在 Unity 中，深度纹理可以直接来自于真正的**深度缓存**，也可以是由一个**单独的Pass渲染**而得，这取决于使用的渲染路径和硬件。
+
+  1. 当使用延迟渲染路径（包括遗留的延迟渲染路径）时，深度纹理可以直接访问到，因为延迟渲染会把这些信息渲染到 G-buffer 中。
+  2. 无法直接获取深度缓存时，深度和法线纹理是通过一个单独的Pass渲染而得的。具体实现是，Unity 会使用**着色器替换(Shader Replacement)技术**选择那些渲染类型（即 SubShader 的 RenderType 标签）为 Opaque 的物体，判断它们使用的渲染队列是否小于等于 2500 (内置的 Background、Geometry 和 AlphaTest 渲染队列均在此范围内），如果满足条件，就把它渲染到深度和法线纹理中。因此，要想让物体能够出现在深度和法线纹理中，就必须在 Shader 中设置正确的 RenderType 标签。
+
+在 Unity 中，可以选择让一个摄像机生成一张**深度纹理**或是一张**深度+法线纹理**。
+
+  1. 只需要一张单独的深度纹理时，Unity 会直接获取深度缓存或是按之前讲到的着色器替换技术，选取需要的不透明物体，并使用它投射阴影时使用的 Pass (即LightMode 被设置为 ShadowCaster 的 Pass) 来得到深度纹理。
+  获取深度纹理后就可以使用当前像素的纹理坐标对它进行采样。绝大多数情况下，可以直接使用 `tex2D` 函数采样，但在某些平台 （例如 PS3 和 PSP2) 上，Unity 为我们提供了一个统一的宏 `SAMPLE_DEPTH_TEXTURE` 用来采样。类似的宏还有`SAMPLE_DEPTH_TEXTURE_PROJ` 和 `SAMPLE_DEPTH_TEXTURE_LOD`。这些宏定义在 `HLSLSupport.cginc` 中。
+  2. 如果选择生成一张深度+法线纹理，Unity 会创建一张和屏幕分辨率相同、精度为 32 位（每个通道为 8 位）的纹理，其中观察空间下的法线信息会被编码进纹理的 R 和 G 通道，而深度信息会被编码进 B 和 A 通道。
+
+```cs
+// 获取深度纹理，通过在脚本中设置摄像机的 depthTextureMode 来完成
+// 然后在 Shader 中通过声明 _CameraDepthTexture 变量来访问它
+camera.depthTextureMode = DepthTextureMode.Depth;
+// 获取深度+法线纹理
+// 然后在 Shader 中通过声明 _CameraDepthNormalsTexture 变量来访问它
+camera.depthTextureMode = DepthTextureMode.DepthNormals;
+
+// 使用内置宏对深度纹理进行采样
+float d = SAMPLE_DEPTH_TEXTURE (_CameraDepthTexture, i.uv);
+float d = SAMPLE_DEPTH_TEXTURE_PROJ(_CameraDepthTexture, UNITY_PROJ_COORD(i.scrPos));
+```
+
+> 非线性深度值转换为线性的深度值
+
+- 辅助函数 `LinearEyeDepth` 把深度纹理的采样结果转换到**视角空间**下的深度值(内部使用了内置的 `_ZBufferParams` 变量来得到远近裁剪平面的距离)
+- 辅助函数 `Linear01Depth` 返回一个范围在 `[0, 1]` 的线性深度值(内部使用了内置的 `_ZBufferParams` 变量来得到远近裁剪平面的距离)
+- 辅助函数 `DecodeDepthNormal` 用于对 `tex2D` 函数对 `_CameraDepthNormalsTexture` 进行采样得到的结果进行解码，从而得到**深度值**(范围在 `[0, 1]` 的线性深度值)和**法线方向**(视角空间下的法线方向)。也可以通过调用 `DecodeFloatRG` 和 `DecodeViewNormalStereo` 来解码深度+法线纹理中的深度和法线信息。
