@@ -4505,7 +4505,7 @@ Shader "Unlit/Chapter12-Bloom"
 如果在摄像机曝光时，拍摄场景发生了变化，就会产生模糊的画面。实现方法有两种：
 
 - **累积缓存**：利用一块累积缓存 (accumulation buffer) 来混合多张连续的图像。当物体快速移动产生多张图像后，我们取它们之间的平均值作为最后的运动模糊图像。这种暴力的方法对**性能的消耗很大**。
-- **速度缓存**：创建和使用速度缓存 (velocity buffer)，这个缓存中存储了各个像素当前的运动速度，然后利用该值来决定模糊的方向和大小。这种方法应用更广泛。
+- **[速度缓冲](速度缓冲实现运动模糊)**：创建和使用速度缓冲 (velocity buffer)，这个缓存中存储了各个像素当前的运动速度，然后利用该值来决定模糊的方向和大小。这种方法应用更广泛。
 
 ## 深度纹理和法线纹理
 
@@ -4542,3 +4542,187 @@ float d = SAMPLE_DEPTH_TEXTURE_PROJ(_CameraDepthTexture, UNITY_PROJ_COORD(i.scrP
 - 辅助函数 `LinearEyeDepth` 把深度纹理的采样结果转换到**视角空间**下的深度值(内部使用了内置的 `_ZBufferParams` 变量来得到远近裁剪平面的距离)
 - 辅助函数 `Linear01Depth` 返回一个范围在 `[0, 1]` 的线性深度值(内部使用了内置的 `_ZBufferParams` 变量来得到远近裁剪平面的距离)
 - 辅助函数 `DecodeDepthNormal` 用于对 `tex2D` 函数对 `_CameraDepthNormalsTexture` 进行采样得到的结果进行解码，从而得到**深度值**(范围在 `[0, 1]` 的线性深度值)和**法线方向**(视角空间下的法线方向)。也可以通过调用 `DecodeFloatRG` 和 `DecodeViewNormalStereo` 来解码深度+法线纹理中的深度和法线信息。
+
+### 速度缓冲实现运动模糊
+
+模拟运动模糊效果中的更加广泛应用的技术是使用**速度映射图**，速度映射图中存储了每个**像素的速度**，然后使用这个速度来决定模糊的方向和大小。
+
+#### 速度缓冲的生成方法
+
+- 把场景中所有物体的速度渲染到一张纹理中(缺点：需要修改场景中所有物体的 Shader 代码，使其添加计算速度的代码并输出到一个渲染纹理中)
+- 利用**深度纹理**在片元着色器中为每个像素计算其在世界空间下的位置(通过使用当前的`视角*投影矩阵`的逆矩阵对 NDC 下的顶点坐标进行变换得到)。使用前一帧的`视角*投影矩阵`对其进行变换，得到该位置在前一帧中的 NDC 坐标。然后计算前一帧和当前帧的位置差，生成该像素的速度(优点：可以在一个屏幕后处理步骤中完成整个效果的模拟；缺点：需要在片元着色器中进行两次矩阵乘法的操作，对性能有所影响)
+
+_**深度纹理模拟运动模糊**_
+
+适用于场景静止、摄像机快速运动的情况。快速移动的物体产生运动模糊的效果，需要生成更加精确的速度映射图，Unity 自带的 `ImageEffect` 包含了更多实现方法。
+
+```cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class MotionBlurWithDepthTexture : PostEffectsBase {
+  public Shader motionBlurShader;
+  private Material motionBlurMaterial = null;
+  public Material material {
+    get {
+      motionBlurMaterial = CheckShaderAndCreateMaterial(motionBlurShader, motionBlurMaterial);
+      return motionBlurMaterial;
+    }
+  }
+  [Range(0.0f, 1.0f)]
+  public float blurSize = 0.5f;
+  // 用于得到摄像机的视角和投影矩阵
+  private Camera myCamera;
+  public Camera camera {
+    get {
+      if(null == myCamera) {
+        myCamera = GetComponent<Camera>();
+      }
+      return myCamera;
+    }
+  }
+  // 保存上一帧摄像机的视角*投影矩阵
+  private Matrix4x4 previousViewProjectionMatrix;
+
+  void OnEnable() {
+    // 设置摄像机的状态(获取摄像机的深度纹理)
+    camera.depthTextureMode |= DepthTextureMode.Depth;
+  }
+
+  void OnRerderImage(RenderTexture src, RenderTexture dest) {
+    if(null != material) {
+      material.SetFloat("_BlurSize", blurSize);
+      material.SetMatrix("_PreviousViewProjectionMatrix", previousViewProjectionMatrix);
+      Matrix4x4 currentViewProjectionMatrix = camera.projectionMatrix * camera.worldToCameraMatrix;
+      // 当前帧的视角*投影矩阵的逆矩阵
+      Matrix4x4 currentViewProjectionInverseMatrix = currentViewProjectionMatrix.inverse;
+      material.SetMatrix("_CurrentViewProjectionInverseMatrix", currentViewProjectionInverseMatrix);
+      previousViewProjectionMatrix = currentViewProjectionMatrix;
+      Graphics.Blit(src, dest, material);
+    } else {
+      Graphics.Blit(src, dest);
+    }
+  }
+}
+```
+
+```cs
+Shader "Unlit/Chapter13-MotionBlurWithDepthTexture"
+{
+  Properties
+  {
+    _MainTex ("Base (RGB)", 2D) = "white" {}
+    _BlurSize ("Bluer Size", Float) = 1.0
+    // Unity 没有提供矩阵类型的属性，无法直接在这里声明
+  }
+  SubShader
+  {
+    CGINCLUDE
+    #include "UnityCG.cginc"
+
+    sampler2D _MainTex;
+    half4 _MainTex_TexelSize;
+    // 由 Unity 传递的纹理
+    sampler2D _CameraDepthTexture;
+    // 由脚本传递的矩阵
+    float4x4 _CurrentViewProjectionInverseMatrix;
+    float4x4 _PreviousViewProjectionMatrix;
+    half _BlurSize;
+
+    struct v2f {
+      float4 pos : SV_POSITION;
+      half2 uv : TEXCOORD0;
+      half2 uv_depth : TEXCOORD1;
+    };
+
+    v2f vert(appdata_img v) {
+      v2f o;
+      o.pos = UnityObjectToClipPos(v.vertex);
+      o.uv = v.texcoord;
+      o.uv_depth = v.texcoord;
+
+      #if UNITY_UV_STARTS_AT_TOP
+      // 处理渲染多张纹理时 DirectX 平台图像翻转问题
+      if(_MainTex_TexelSize.y < 0) {
+        o.uv_depth.y = 1 - o.uv_depth.y;
+      }
+      #endif
+
+      return o;
+    }
+
+    fixed4 frag(v2f i) : SV_Target {
+      // 获取当前像素的深度缓冲值(由 NDC 下的坐标映射得来)
+      float d = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv_depth);
+      // 当前像素的 NDC 坐标 H，深度值重新映射回 NDC，范围均为 [-1, 1]
+      float4 H = float4(i.uv.x * 2 - 1, i.uv.y * 2 - 1, d * 2 - 1, 1);
+      // 使用当前帧的视角*投影矩阵的逆矩阵对 NDC 坐标进行变换，并把结果值除以它的 w 分量来得到世界空间下的坐标表示
+      float4 D = mul(_CurrentViewProjectionInverseMatrix, H);
+      float4 worldPos = D / D.w;
+      // 当前视角坐标
+      float4 currentPos = H;
+      // 使用前一帧的视角*投影矩阵对世界空间下的坐标进行变换，得到前一帧在 NDC 下的坐标
+      float4 previousPos = mul(_PreviousViewProjectionMatrix, worldPos);
+      // 得到取值 [-1, 1] 间的非线性点
+      previousPos /= previousPos.w;
+
+      // 计算前一帧和当前帧在屏幕空间下的位置差得到该像素的速度
+      float2 velocity = (currentPos.xy - previousPos.xy) / 2.0f;
+      // 使用速度值对它的邻域像素进行采样，相加后取平均值得到一个模糊的效果
+      float2 uv = i.uv;
+      float4 c = tex2D(_MainTex, uv);
+      uv += velocity * _BlurSize; // _BlurSize 用于控制采样距离
+      for(int it = 1; it < 3; it++, uv += velocity * _BlurSize) {
+        float4 currentColor = tex2D(_MainTex, uv);
+        c += currentColor;
+      }
+      c /= 3;
+      return fixed4(c.rgb, 1.0);
+    }
+    ENDCG
+
+    Pass {
+      Ztest Always Cull Off ZWrite Off
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      ENDCG
+    }
+  }
+  FallBack Off
+}
+```
+
+### 基于屏幕后处理的全局雾效
+
+Unity 内置的雾效可以产生基于距离的线性或指数雾效。要实现其他自定义的雾效需要使用 `#pragma multi_compile_fog` 指令，同时使用相关的内置宏如 `UNITY_FOG_COORDS`、`UNITY_TRANSFER_FOG` 和 `UNITY_APPLY_FOG` 等。然而使用这种方式可实现的效果非常有限。
+
+> 基于屏幕后处理的全局雾效的关键是，根据深度纹理来重建每个像素在世界空间下的位置。主要有两种方式：
+
+  1. 构建出当前像素的 NDC 坐标，再通过当前摄像机的视角*投影矩阵的逆矩阵来得到世界空间下的像素坐标(需要在片元着色器中进行矩阵乘法的操作，会影响游戏性能)
+  2. 从深度纹理中重建世界坐标。首先对图像空间下的视锥体射线（从摄像机出发，指向图像上的某点的射线）进行插值，这条射线存储了该像素在世界空间下到摄像机的方向信息。然后把该射线和线性化后的视角空间下的深度值相乘，再加上摄像机的世界位置，就得到该像素在世界空间下的位置。
+
+  ```cs
+  float4 worldPos = _WorldSpaceCameraPos + linearDepth * interpolatedRay;
+  ```
+
+> 雾的计算
+
+在简单的雾效实现中，需要计算一个雾效系数 `f`，作为混合原始颜色和雾的颜色的混合系数：
+
+```cs
+float3 afterFog = f * fogColor + (1 - f) * origColor;
+```
+
+Unity 内置的雾效实现中，支待三种雾的计算方式：
+
+- 线性 Linear:
+  `f = [d(max) - |z|]/[d(max) - d(min)]`,
+  `d(min)` 和 `d(max)` 分别表示受雾影响的最小距离和最大距离.
+- 指数 Exponential:
+  `f = e^(-d·|z|)`,
+  `d` 是控制雾的浓度的参数.
+- 指数平方 Exponential Squared:
+  `f = e^[(-d - |z|)^2]`
