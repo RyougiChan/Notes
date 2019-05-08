@@ -4119,6 +4119,164 @@ Shader "Unlit/EdgeDetection"
 }
 ```
 
+### 边缘检测优化
+
+使用 Sobel 算子对屏幕图像进行边缘检测实现描边的效果会产生很多不希望得到的边缘线，如物体的纹理、阴影等位置会被描上边缘。另一种更加可靠的方式是**在深度和法线纹理上进行边缘检测**，它使用的是**Roberts 算子**，Roberts 算子的本质是计算左上角和右下角的差值，乘以右上角和左下角的差值， 作为评估边缘的依据。
+
+![Roberts 算子](http://static.zybuluo.com/candycat/ziah5yj1twj4nva7ldvw8dnk/Roberts.png)
+
+```cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class EdgeDetectNormalsAndDepth : PostEffectsBase {
+  public Shader edgeDetectShader;
+  private Material edgeDetectMaterial = null;
+  public Material material {  
+    get {
+      edgeDetectMaterial = CheckShaderAndCreateMaterial(edgeDetectShader, edgeDetectMaterial);
+      return edgeDetectMaterial;
+    }  
+  }
+
+  [Range(0.0f, 1.0f)]
+  public float edgesOnly = 0.0f;
+
+  public Color edgeColor = Color.black;
+
+  public Color backgroundColor = Color.white;
+  // 控制对深度+法线纹理采样时，使用的采样距离，值越大，描边越宽
+  public float sampleDistance = 1.0f;
+  // 影响当邻域的深度值或法线值相差多少时，会被认为存在一条边界
+  public float sensitivityDepth = 1.0f;
+  public float sensitivityNormals = 1.0f;
+  
+  void OnEnable() {
+    GetComponent<Camera>().depthTextureMode |= DepthTextureMode.DepthNormals;
+  }
+
+  // 在不透明的 Pass (即渲染队列小于等于 2500 的 Pass，
+  // 内置的 Background、Geometry 和 AlphaTest 渲染队列均在此范围内）执行完毕后立即调用该函数，
+  // 而不对透明物体（渲染队列为 Transparent 的 Pass) 产生影响
+  [ImageEffectOpaque]
+  void OnRenderImage (RenderTexture src, RenderTexture dest) {
+    if (material != null) {
+      material.SetFloat("_EdgeOnly", edgesOnly);
+      material.SetColor("_EdgeColor", edgeColor);
+      material.SetColor("_BackgroundColor", backgroundColor);
+      material.SetFloat("_SampleDistance", sampleDistance);
+      material.SetVector("_Sensitivity", new Vector4(sensitivityNormals, sensitivityDepth, 0.0f, 0.0f));
+
+      Graphics.Blit(src, dest, material);
+    } else {
+      Graphics.Blit(src, dest);
+    }
+  }
+}
+```
+
+```cs
+Shader "Unlit/Chapter13-EdgeDetectNormalsAndDepth"
+{
+  Properties {
+    _MainTex ("Base (RGB)", 2D) = "white" {}
+    _EdgeOnly ("Edge Only", Float) = 1.0
+    _EdgeColor ("Edge Color", Color) = (0, 0, 0, 1)
+    _BackgroundColor ("Background Color", Color) = (1, 1, 1, 1)
+    _SampleDistance ("Sample Distance", Float) = 1.0
+    _Sensitivity ("Sensitivity", Vector) = (1, 1, 1, 1)
+  }
+  SubShader {
+    CGINCLUDE
+
+    #include "UnityCG.cginc"
+
+    sampler2D _MainTex;
+    // 用于对邻域像素进行纹理采样
+    half4 _MainTex_TexelSize;
+    fixed _EdgeOnly;
+    fixed4 _EdgeColor;
+    fixed4 _BackgroundColor;
+    float _SampleDistance;
+    half4 _Sensitivity;
+
+    sampler2D _CameraDepthNormalsTexture;
+
+    struct v2f {
+      float4 pos : SV_POSITION;
+      half2 uv[5]: TEXCOORD0;
+    };
+
+    v2f vert(appdata_img v) {
+      v2f o;
+      o.pos = UnityObjectToClipPos(v.vertex);
+
+      half2 uv = v.texcoord;
+      o.uv[0] = uv;
+
+      #if UNITY_UV_STARTS_AT_TOP
+      if (_MainTex_TexelSize.y < 0)
+        uv.y = 1 - uv.y;
+      #endif
+      // 存储使用 Roberts 算子时需要采样的纹理坐标，乘上 _SampleDistance 用于控制采样距离
+      o.uv[1] = uv + _MainTex_TexelSize.xy * half2(1,1) * _SampleDistance;
+      o.uv[2] = uv + _MainTex_TexelSize.xy * half2(-1,-1) * _SampleDistance;
+      o.uv[3] = uv + _MainTex_TexelSize.xy * half2(-1,1) * _SampleDistance;
+      o.uv[4] = uv + _MainTex_TexelSize.xy * half2(1,-1) * _SampleDistance;
+
+      return o;
+    }
+
+    // 分别计算对角线上两个纹理值的差值
+    half CheckSame(half4 center, half4 sample) {
+      half2 centerNormal = center.xy;
+      float centerDepth = DecodeFloatRG(center.zw);
+      half2 sampleNormal = sample.xy;
+      float sampleDepth = DecodeFloatRG(sample.zw);
+      // difference in normals
+      // do not bother decoding normals - there's no need here
+      half2 diffNormal = abs(centerNormal - sampleNormal) * _Sensitivity.x;
+      int isSameNormal = (diffNormal.x + diffNormal.y) < 0.1;
+      // difference in depth
+      float diffDepth = abs(centerDepth - sampleDepth) * _Sensitivity.y;
+      // scale the required threshold by the distance
+      int isSameDepth = diffDepth < 0.1 * centerDepth;
+      // return:
+      // 1 - if normals and depth are similar enough
+      // 0 - otherwise
+      return isSameNormal * isSameDepth ? 1.0 : 0.0;
+    }
+
+    fixed4 fragRobertsCrossDepthAndNormal(v2f i) : SV_Target {
+      half4 sample1 = tex2D(_CameraDepthNormalsTexture, i.uv[1]);
+      half4 sample2 = tex2D(_CameraDepthNormalsTexture, i.uv[2]);
+      half4 sample3 = tex2D(_CameraDepthNormalsTexture, i.uv[3]);
+      half4 sample4 = tex2D(_CameraDepthNormalsTexture, i.uv[4]);
+
+      half edge = 1.0;
+      // 得到边缘信息后
+      edge *= CheckSame(sample1, sample2);
+      edge *= CheckSame(sample3, sample4);
+      // 颜色混合
+      fixed4 withEdgeColor = lerp(_EdgeColor, tex2D(_MainTex, i.uv[0]), edge);
+      fixed4 onlyEdgeColor = lerp(_EdgeColor, _BackgroundColor, edge);
+
+      return lerp(withEdgeColor, onlyEdgeColor, _EdgeOnly);
+    }
+    ENDCG
+    Pass {
+      ZTest Always Cull Off ZWrite Off
+      CGPROGRAM
+      #pragma vertex vert  
+      #pragma fragment fragRobertsCrossDepthAndNormal
+      ENDCG  
+    }
+  }
+  FallBack Off
+}
+```
+
 ### 高斯模糊
 
 **高斯模糊**是卷积的另一个常见应用，它使用的卷积核名为**高斯核**，高斯核是一个正方形大小的滤波核，其中每个元素的计算都是基于下面的高斯方程：
