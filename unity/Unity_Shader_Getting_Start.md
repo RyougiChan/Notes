@@ -4887,13 +4887,15 @@ Unity 内置的雾效实现中，支待三种雾的计算方式：
 
 ## 非真实感渲染
 
+非真实感渲染学习书籍：『 艺术化绘制的图形学原理与方法 』
+
 ### 卡通风格渲染
 
 实现卡通渲染有很多方法，其中之一是使用**基于色调的着色技术 (tone-based shading)**。在实现中，往往会使用漫反射系数对一张一维纹理进行采样，以控制漫反射的色调，模型的高光往往是一块块分界明显的纯色区域。卡通风格通常还需要在物体边缘部分绘制轮廓。
 
 #### 渲染轮廓线
 
-《Real Time Rendering, third edition》一书中把绘制模型轮廓线的方法分成了以下 5 种：
+『 Real Time Rendering, third edition 』一书中把绘制模型轮廓线的方法分成了以下 5 种：
 
 - 基于观察角度和表面法线的轮廓线渲染。
 
@@ -4937,3 +4939,152 @@ spec = lerp(0, 1, smoothstep(-w, w, spec - threshold));
 
 ### 素描风格
 
+微软研究院的[Praun等人](http://hhoppe.com/hatching.pdf)提出了使用提前生成的素描纹理来实现实时的素描风格渲染，这些纹理组成了一个**色调艺术映射(TonalArt Map, TAM)**。
+
+![一个TAM的例子:从左到右纹理中的笔触逐渐增多，用于模拟不同光照下的漫反射效果，从上到下则对应了每张纹理的多级渐远纹理(mipmaps)](http://static.zybuluo.com/candycat/9h63lflg1a7f759pw5cwfqvz/TAM.png)
+
+_**简化版实现：不考虑多级渐远纹理的生成**_
+
+```cs
+Shader "Unlit/Chapter14-Hatching"
+{
+  Properties
+  {
+    _Color ("Color Tint", Color) = (1, 1, 1, 1)
+    // _TileFactor 是纹理的平铺系数，_TileFactor 越大，模型上的素描线条越密
+    _TileFactor ("Tile Factor", Float) = 1
+    _Outline ("Outline", Range(0, 1)) = 0.1
+    // _Hatch0 至 _Hatch5 对应了渲染时使用的 6 张素描纹理，它们的线条密度依次增大
+    _Hatch0 ("Hatch 0", 2D) = "white" {}
+    _Hatch1 ("Hatch 1", 2D) = "white" {}
+    _Hatch2 ("Hatch 2", 2D) = "white" {}
+    _Hatch3 ("Hatch 3", 2D) = "white" {}
+    _Hatch4 ("Hatch 4", 2D) = "white" {}
+    _Hatch5 ("Hatch 5", 2D) = "white" {}
+  }
+  SubShader
+  {
+    Tags { "RenderType"="Opaque" "Quene"="Geometry" }
+
+    // 获取轮廓线
+    UsePass "Unlit/Chapter14-ToonShading/OUTLINE"
+
+    Pass
+    {
+      Tags { "LightMode"="ForwardBase" }
+
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      #pragma multi_compile_fwdbase
+
+      #include "UnityCG.cginc"
+      #include "Lighting.cginc"
+      #include "AutoLight.cginc"
+      #include "UnityShaderVariables.cginc"
+
+      fixed4 _Color;
+      float _TileFactor;
+      sampler2D _Hatch0;
+      sampler2D _Hatch1;
+      sampler2D _Hatch2;
+      sampler2D _Hatch3;
+      sampler2D _Hatch4;
+      sampler2D _Hatch5;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float4 tangent : TANGENT;
+        float3 normal : NORMAL;
+        float2 texcoord : TEXCOORD0;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float2 uv : TEXCOORD0;
+        fixed3 hatchWeights0 : TEXCOORD1;
+        fixed3 hatchWeights1 : TEXCOORD2;
+        float3 worldPos : TEXCOORD3;
+        SHADOW_COORDS(4)
+      };
+
+      sampler2D _MainTex;
+      float4 _MainTex_ST;
+
+      v2f vert (a2v v)
+      {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        o.uv = v.texcoord.xy * _TileFactor;
+
+        fixed3 worldLightDir = normalize(WorldSpaceLightDir(v.vertex));
+        fixed3 worldNormal = UnityObjectToWorldNormal(v.normal);
+        // 漫反射系数
+        fixed diff = saturate(dot(worldLightDir, worldNormal));
+
+        o.hatchWeights0 = fixed3(0, 0, 0);
+        o.hatchWeights1 = fixed3(0, 0, 0);
+
+        // 把 diff 缩放到[0, 7] 范围
+        float hatchFactor = diff * 7.0;
+
+        // 把 [0, 7] 的区间均匀划分为 7 个子区间
+        // 通过判断 batchFactor 所处的子区间来计算对应的纹理混合权重
+        if (hatchFactor > 6.0) {
+          // Pure white, do nothing
+        } else if (hatchFactor > 5.0) {
+          o.hatchWeights0.x = hatchFactor - 5.0;
+        } else if (hatchFactor > 4.0) {
+          o.hatchWeights0.x = hatchFactor - 4.0;
+          o.hatchWeights0.y = 1.0 - o.hatchWeights0.x;
+        } else if (hatchFactor > 3.0) {
+          o.hatchWeights0.y = hatchFactor - 3.0;
+          o.hatchWeights0.z = 1.0 - o.hatchWeights0.y;
+        } else if (hatchFactor > 2.0) {
+          o.hatchWeights0.z = hatchFactor - 2.0;
+          o.hatchWeights1.x = 1.0 - o.hatchWeights0.z;
+        } else if (hatchFactor > 1.0) {
+          o.hatchWeights1.x = hatchFactor - 1.0;
+          o.hatchWeights1.y = 1.0 - o.hatchWeights1.x;
+        } else {
+          o.hatchWeights1.y = hatchFactor;
+          o.hatchWeights1.z = 1.0 - o.hatchWeights1.y;
+        }
+
+        o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+
+        TRANSFER_SHADOW(o);
+
+        return o; 
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        // 对每张纹理进行采样并和它们对应的权重值相乘得到每张纹理的采样颜色
+        fixed4 hatchTex0 = tex2D(_Hatch0, i.uv) * i.hatchWeights0.x;
+        fixed4 hatchTex1 = tex2D(_Hatch1, i.uv) * i.hatchWeights0.y;
+        fixed4 hatchTex2 = tex2D(_Hatch2, i.uv) * i.hatchWeights0.z;
+        fixed4 hatchTex3 = tex2D(_Hatch3, i.uv) * i.hatchWeights1.x;
+        fixed4 hatchTex4 = tex2D(_Hatch4, i.uv) * i.hatchWeights1.y;
+        fixed4 hatchTex5 = tex2D(_Hatch5, i.uv) * i.hatchWeights1.z;
+        // 计算纯白在渲染中的贡献度
+        fixed4 whiteColor = fixed4(1, 1, 1, 1) * (1 - i.hatchWeights0.x - i.hatchWeights0.y - i.hatchWeights0.z -
+              i.hatchWeights1.x - i.hatchWeights1.y - i.hatchWeights1.z);
+
+        fixed4 hatchColor = hatchTex0 + hatchTex1 + hatchTex2 + hatchTex3 + hatchTex4 + hatchTex5 + whiteColor;
+
+        UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+
+        return fixed4(hatchColor.rgb * _Color.rgb * atten, 1.0);
+      }
+      ENDCG
+    }
+  }
+  Fallback "Diffuse"
+}
+```
+
+## 噪声
+
+### 实现消融效果
+
+消融效果原理非常简单，概括来说就是**噪声纹理**+**透明度测试**。使用对噪声纹理采样的结果和某个控制消融程度的阈值比较，如果小于阈值，就使用 `clip` 函数把它对应的像素裁剪掉。
