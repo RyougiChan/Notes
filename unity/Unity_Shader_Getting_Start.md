@@ -5088,3 +5088,146 @@ Shader "Unlit/Chapter14-Hatching"
 ### 实现消融效果
 
 消融效果原理非常简单，概括来说就是**噪声纹理**+**透明度测试**。使用对噪声纹理采样的结果和某个控制消融程度的阈值比较，如果小于阈值，就使用 `clip` 函数把它对应的像素裁剪掉。
+
+```cs
+Shader "Unlit/Chapter15-Dissolve"
+{
+  Properties
+  {
+    // 控制消融程度
+    _BurnAmount ("Burn Amount", Range(0.0,1.0)) = 0.0
+    // 控制模拟烧焦效果时的线宽
+    _LineWidth ("Burn Line Width", Range(0.0, 0.2)) = 0.1
+    // 漫反射纹理
+    _MainTex ("Base (RGB)", 2D) = "white" {}
+    // 法线纹理
+    _BumpMap ("Bump Map", 2D) = "white" {}
+    // 火焰边缘的两种颜色值
+    _BurnFirstColor ("Burn First Color", Color) = (1,0,0,1)
+    _BurnSecondColor ("Burn Second Color", Color) = (1,0,0,1)
+    // 噪声纹理
+    _BurnMap ("Burn Map", 2D) = "white" {}
+  }
+  SubShader
+  {
+    Tags { "RenderType"="Opaque" "Queue"="Geometry"}
+
+    Pass
+    {
+      Tags { "LightMode"="ForwardBase" }
+      // 关闭该 Shader 的面片剔除，模型的正面和背面都会被渲染
+      Cull Off
+
+      CGPROGRAM
+
+      #include "Lighting.cginc"
+      #include "AutoLight.cginc"
+
+      #pragma vertex vert
+      #pragma fragment frag
+      #pragma multi_compile_fwdbase
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+        float4 tangent : TANGENT;
+        float4 texcoord : TEXCOORD0;
+      };
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float2 uvMainTex : TEXCOORD0;
+        float2 uvBumpMap : TEXCOORD1;
+        float2 uvBurnMap : TEXCOORD2;
+        float3 lightDir : TEXCOORD3;
+        float3 worldPos : TEXCOORD4;
+        SHADOW_COORDS(5)
+      };
+
+      fixed _BurnAmount;
+      fixed _LineWidth;
+      sampler2D _MainTex;
+      sampler2D _BumpMap;
+      fixed4 _BurnFirstColor;
+      fixed4 _BurnSecondColor;
+      sampler2D _BurnMap;
+      float4 _MainTex_ST;
+      float4 _BumpMap_ST;
+      float4 _BurnMap_ST;
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+        // 计算了三张纹理对应的纹理坐标
+        o.uvMainTex = TRANSFORM_TEX(v.texcoord, _MainTex);
+        o.uvBumpMap = TRANSFORM_TEX(v.texcoord, _BumpMap);
+        o.uvBurnMap = TRANSFORM_TEX(v.texcoord, _BurnMap);
+
+        TANGENT_SPACE_ROTATION;
+        // 把光源方向从模型空间变换到了切线空间
+          o.lightDir = mul(rotation, ObjSpaceLightDir(v.vertex)).xyz;
+          o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+          // 得到阴影信息
+          TRANSFER_SHADOW(o);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        // 对噪声纹理进行采样
+        fixed3 burn = tex2D(_BurnMap, i.uvBurnMap).rgb;
+        // 将采样结果和属性 _BurnAmount 相减传递给 clip（当结果小于 0 时，该像素将会被剔除）
+        clip(burn.r - _BurnAmount);
+
+        float3 tangentLightDir = normalize(i.lightDir);
+        fixed3 tangentNormal = UnpackNormal(tex2D(_BumpMap, i.uvBumpMap));
+
+        // 材质的反射率
+        fixed3 albedo = tex2D(_MainTex, i.uvMainTex).rgb;
+        fixed3 ambient = UNITY_LIGHTMODEL_AMBIENT.xyz * albedo;
+        fixed3 diffuse = _LightColor0.rgb * albedo * max(0, dot(tangentNormal, tangentLightDir));
+
+        // 在宽度为 _LineWidth 的范围内模拟一个烧焦的颜色变化
+        fixed t = 1 - smoothstep(0.0, _LineWidth, burn.r - _BurnAmount);
+        fixed3 burnColor = lerp(_BurnFirstColor, _BurnSecondColor, t);
+        // pow 只是让效果更接近烧焦的痕迹
+        burnColor = pow(burnColor, 5);
+
+        UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
+        fixed3 finalColor = lerp(ambient + diffuse * atten, burnColor, t * step(0.0001, _BurnAmount));
+
+        return fixed4(finalColor, 1);
+      }
+      ENDCG
+    }
+    // 用于投射阴影的 Pass（使用透明度测试的物体的阴影需要特别处理）
+    Pass {
+      Tags { "LightMode" = "ShadowCaster" }
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment frag
+      #pragma multi_compile_shadowcaster
+      #include "UnityCG.cginc"
+      fixed _BurnAmount;
+      sampler2D _BurnMap;
+      float4 _BurnMap_ST;
+      struct v2f {
+        V2F_SHADOW_CASTER;
+        float2 uvBurnMap : TEXCOORD1;
+      };
+      v2f vert(appdata_base v) {
+        v2f o;
+        TRANSFER_SHADOW_CASTER_NORMALOFFSET(o)
+        o.uvBurnMap = TRANSFORM_TEX(v.texcoord, _BurnMap);
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        fixed3 burn = tex2D(_BurnMap, i.uvBurnMap).rgb;
+
+        clip(burn.r - _BurnAmount);
+
+        SHADOW_CASTER_FRAGMENT(i)
+      }
+      ENDCG
+    }
+  }
+}
+```
