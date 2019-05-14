@@ -5231,3 +5231,133 @@ Shader "Unlit/Chapter15-Dissolve"
   }
 }
 ```
+
+### 实现水波效果
+
+模拟水波效果时，噪声纹理通常会用作一个**高度图**，以不断修改水面的法线方向。为了模拟水不断流动的效果，使用和**时间相关**的变量来对噪声纹理进行采样，当得到法线信息后，再进行正常的反射+折射计算，得到最后的水面波动效果。
+
+```cs
+Shader "Unlit/Chapter15-WaterWaveMat"
+{
+  Properties {
+    _Color ("Main Color", Color) = (0, 0.15, 0.115, 1)
+    // 水面波纹材质纹理
+    _MainTex ("Base (RGB)", 2D) = "white" {}
+    // 由噪声纹理生成的法线纹理
+    _WaveMap ("Wave Map", 2D) = "bump" {}
+    // 用于模拟反射的立方体纹理
+    _Cubemap ("Environment Cubemap", Cube) = "_Skybox" {}
+    // 用于控制法线纹理在 X 和 Y 方向上的平移速度
+    _WaveXSpeed ("Wave Horizontal Speed", Range(-0.1, 0.1)) = 0.01
+    _WaveYSpeed ("Wave Vertical Speed", Range(-0.1, 0.1)) = 0.01
+    // 用于控制模拟折射时图像的扭曲程度
+    _Distortion ("Distortion", Range(0, 100)) = 10
+  }
+  SubShader {
+    // We must be transparent, so other objects are drawn before this one.
+    Tags { "Queue"="Transparent" "RenderType"="Opaque" }
+
+    // 获取屏幕图像
+    // This pass grabs the screen behind the object into a texture.
+    // We can access the result in the next pass as _RefractionTex
+    GrabPass { "_RefractionTex" }
+
+    Pass {
+      Tags { "LightMode"="ForwardBase" }
+
+      CGPROGRAM
+
+      #include "UnityCG.cginc"
+      #include "Lighting.cginc"
+
+      #pragma multi_compile_fwdbase
+
+      #pragma vertex vert
+      #pragma fragment frag
+
+      fixed4 _Color;
+      sampler2D _MainTex;
+      float4 _MainTex_ST;
+      sampler2D _WaveMap;
+      float4 _WaveMap_ST;
+      samplerCUBE _Cubemap;
+      fixed _WaveXSpeed;
+      fixed _WaveYSpeed;
+      float _Distortion;
+      // 对应了在使用 GrabPass 时，指定的纹理名称
+      sampler2D _RefractionTex;
+      float4 _RefractionTex_TexelSize;
+
+      struct a2v {
+        float4 vertex : POSITION;
+        float3 normal : NORMAL;
+        float4 tangent : TANGENT; 
+        float4 texcoord : TEXCOORD0;
+      };
+
+      struct v2f {
+        float4 pos : SV_POSITION;
+        float4 scrPos : TEXCOORD0;
+        float4 uv : TEXCOORD1;
+        float4 TtoW0 : TEXCOORD2;  
+        float4 TtoW1 : TEXCOORD3;  
+        float4 TtoW2 : TEXCOORD4;
+      };
+
+      v2f vert(a2v v) {
+        v2f o;
+        o.pos = UnityObjectToClipPos(v.vertex);
+
+        o.scrPos = ComputeGrabScreenPos(o.pos);
+
+        o.uv.xy = TRANSFORM_TEX(v.texcoord, _MainTex);
+        o.uv.zw = TRANSFORM_TEX(v.texcoord, _WaveMap);
+
+        float3 worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;  
+        fixed3 worldNormal = UnityObjectToWorldNormal(v.normal);  
+        fixed3 worldTangent = UnityObjectToWorldDir(v.tangent.xyz);  
+        fixed3 worldBinormal = cross(worldNormal, worldTangent) * v.tangent.w;
+
+        o.TtoW0 = float4(worldTangent.x, worldBinormal.x, worldNormal.x, worldPos.x);  
+        o.TtoW1 = float4(worldTangent.y, worldBinormal.y, worldNormal.y, worldPos.y);  
+        o.TtoW2 = float4(worldTangent.z, worldBinormal.z, worldNormal.z, worldPos.z);  
+
+        return o;
+      }
+
+      fixed4 frag(v2f i) : SV_Target {
+        float3 worldPos = float3(i.TtoW0.w, i.TtoW1.w, i.TtoW2.w);
+        fixed3 viewDir = normalize(UnityWorldSpaceViewDir(worldPos));
+        float2 speed = _Time.y * float2(_WaveXSpeed, _WaveYSpeed);
+
+        // Get the normal in tangent space
+        fixed3 bump1 = UnpackNormal(tex2D(_WaveMap, i.uv.zw + speed)).rgb;
+        fixed3 bump2 = UnpackNormal(tex2D(_WaveMap, i.uv.zw - speed)).rgb;
+        fixed3 bump = normalize(bump1 + bump2);
+
+        // Compute the offset in tangent space
+        float2 offset = bump.xy * _Distortion * _RefractionTex_TexelSize.xy;
+        // (*i.scrPos.z )模拟深度越大、折射程度越大的效果
+        i.scrPos.xy = offset * i.scrPos.z + i.scrPos.xy;
+        // 透视除法 _RefractionTex采样
+        fixed3 refrCol = tex2D( _RefractionTex, i.scrPos.xy/i.scrPos.w).rgb;
+
+        // Convert the normal to world space
+        bump = normalize(half3(dot(i.TtoW0.xyz, bump), dot(i.TtoW1.xyz, bump), dot(i.TtoW2.xyz, bump)));
+        fixed4 texColor = tex2D(_MainTex, i.uv.xy + speed);
+        fixed3 reflDir = reflect(-viewDir, bump);
+        fixed3 reflCol = texCUBE(_Cubemap, reflDir).rgb * texColor.rgb * _Color.rgb;
+
+        fixed fresnel = pow(1 - saturate(dot(viewDir, bump)), 4);
+        fixed3 finalColor = reflCol * fresnel + refrCol * (1 - fresnel);
+
+        return fixed4(finalColor, 1);
+      }
+
+      ENDCG
+    }
+  }
+  // Do not cast shadow
+  FallBack Off
+}
+```
