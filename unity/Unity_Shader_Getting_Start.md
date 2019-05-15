@@ -5055,7 +5055,7 @@ Shader "Unlit/Chapter14-Hatching"
 
         TRANSFER_SHADOW(o);
 
-        return o; 
+        return o;
       }
 
       fixed4 frag(v2f i) : SV_Target {
@@ -5291,7 +5291,7 @@ Shader "Unlit/Chapter15-WaterWaveMat"
       struct a2v {
         float4 vertex : POSITION;
         float3 normal : NORMAL;
-        float4 tangent : TANGENT; 
+        float4 tangent : TANGENT;
         float4 texcoord : TEXCOORD0;
       };
 
@@ -5361,3 +5361,75 @@ Shader "Unlit/Chapter15-WaterWaveMat"
   FallBack Off
 }
 ```
+
+### 全局雾效
+
+在[基于屏幕后处理的全局雾效](#基于屏幕后处理的全局雾效)的基础上应用噪声模拟不均匀动态雾效
+
+## Unity中的渲染优化技术
+
+### 优化技术基础
+
+#### 移动平台与 PC 平台
+
+和 PC 平台相比，移动平台上的 GPU 架构有很大的不同。由于处理资源等条件的限制，移动设备上的 GPU 架构专注于尽可能使用更小的带宽和功能，也由此带来了许多和 PC 平台完全不同的现象。
+
+由于这些芯片架构造成的不同，一些游戏往往需要针对不同的芯片发布不同的版本，以便对每个芯片进行更有针对性的优化。
+
+对于一个游戏来说， 它主要需要使用两种计算资源：CPU 和 GPU。它们会互相合作， 来让我们的游戏可以在预期的帧率和分辨率下工作。其中，CPU 主要负责保证帧率，GPU 主要负责分辨率相关的一些处理。
+
+#### 影响因素
+
+CPU 因素
+
+- 过多的 draw call。
+- 复杂的脚本或者物理模拟。
+
+GPU 因素
+
+- 顶点处理。
+  - 过多的顶点。
+  - 过多的逐顶点计算。
+- 片元处理。
+  - 过多的片元（既可能是由于分辨率造成的，也可能是由于 overdraw 造成的）。
+  - 过多的逐片元计算。
+带宽因素
+
+- 使用了尺寸很大且未压缩的纹理。
+
+#### 针对 CPU 和 GPU 的优化
+
+CPU 优化
+
+- 使用批处理技术减少drawcall数目。
+
+GPU 优化
+
+- 减少需要处理的顶点数目。
+  - 优化几何体。
+  - 使用模型的 LOD (Level ofDetail) 技术。
+  - 使用遮挡剔除(OcclusionCulling)技术。
+- 减少需要处理的片元数目。
+  - 控制绘制顺序。
+  - 警惕透明物体。
+  - 减少实时光照。
+- 减少计算复杂度。
+  - 使用Shader的LOD(Level of Detail)技术。
+  - 代码方面的优化。
+
+节省内存带宽
+
+- 减少纹理大小。
+- 利用分辨率缩放。
+
+#### 分析工具
+
+- 渲染统计窗口(RenderingStatistics Window)
+- 性能分析器(Profiler)
+- 帧调试器(Frame Debugger)
+- 高通的 Adreno 分析工具
+- 英伟达的 NVPerfHUD 工具
+- PowerVRAM 的 PVRUniSCo shader 分析器
+- Xcode 中的 OpenGL ES Driver Instruments
+
+### 减少 draw call 数目
