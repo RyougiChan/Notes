@@ -5564,3 +5564,45 @@ SubShader {
 #### 根据硬件条件进行缩放
 
 根据设备硬件性能的不同启用不同的分辨率、特效等。
+
+## 表面着色器
+
+### 编译指令
+
+`#pragma surface` 用于指明该编译指令是用于定义表面着色器的，在它的后面需要指明使用的表面函数(`surfaceFunction`)和光照模型(`lightModel`)，同时，还可以使用一些可选参数来控制表面着色器的一些行为。
+
+#### 表面函数
+
+一个对象的表面属性定义了它的反射率、光滑度、透明度等值。而编译指令中的 `surfaceFunction` 就用于定义这些表面属性。`surfaceFunction` 通常就是名为  `surf` 的函数（函数名可以是任意的），它的函数格式是固定的：
+
+```cs
+// 输入结构体 Input IN 来设置各种表面属性
+// 并把这些属性存储在输出结构体 SurfaceOutput、SurfaceOutputStandard或SurfaceOutputStandardSpecular中
+// 再传递给光照函数计算光照结果
+void surf(Input IN, inout SurfaceOutput o)
+void surf(Input IN, inout SurfaceOutputStandard o)
+void surf(Input IN, inout SurfaceOutputStandardSpecular o)
+```
+
+#### 光照函数
+
+光照函数会使用表面函数中设置的各种表面属性，来应用某些光照模型，进而模拟物体表面的光照效果。
+
+Unity 内置了基于物理的光照模型函数 `Standard` 和 `StandardSpecular` (在 `UnityPBSLighting.cginc` 文件中被定义），以及简单的非基于物理的光照模型函数 `Lambert` 和 `BlinnPhoog` (在 `Lighting.cginc` 文件中被定义）。
+
+[Custom lighting models in Surface Shaders](https://docs.unity3d.com/Manual/SL-SurfaceShaderLighting.html)
+
+#### 可选参数
+
+可选参数包含了很多非常有用的指令类型，例如，开启/设置透明度混合/透明度测试，指明自定义的顶点和颜色修改函数，控制生成的代码等。
+
+- 自定义的修改函数。
+  除了表面函数和光照模型外，表面着色器还可以支持其他两种自定义的函数：**顶点修改函数**(`vertex:VertexFunction`) 和**最后的颜色修改函数**(`finalcolor:ColorFunction`)。顶点修改函数允许我们自定义顶点属性，例如，把顶点颜色传递给表面函数，或是修改顶点位置，实现某些顶点动画等。最后的颜色修改函数则可以在颜色绘制到屏幕前，最后一次修改颜色值，例如实现自定义的雾效等。
+- 阴影。
+  可以通过一些指令来控制和阴影相关的代码。例如 `addshadow` 参数会为表面着色器生成一个阴影投射的 Pass。`fullforwardshadows` 参数则可以在前向渲染路径中支待所有光源类型的阴影。`noshadow` 参数用来禁用阴影。
+- 透明度混合和透明度测试。
+  可以通过 `alpha` 和 `alphatest` 指令来控制透明度混合和透明度测试。例如，`alphatest:VariableName` 指令会使用名为 `VariableName` 的变量来剔除不满足条件的片元。
+- 光照。
+  一些指令可以控制光照对物体的影响。`noambient` 参数会告诉 Unity 不要应用任何环境光照或光照探针(light probe)。`novertexlights` 参数告诉 Unity 不要应用任何逐顶点光照。`noforwardadd` 会去掉所有前向渲染中的额外的 Pass。`nolightmap` 、`nofog` 用于控制光照烘焙、雾效模拟。
+- 控制代码的生成。
+  一些指令还可以控制由表面着色器自动生成的代码。如 `exclude_path:deferred`、`exclude_path:forward`和`exclude_path :prepass` 制定不需要为某些渲染路径生成代码。
