@@ -5603,6 +5603,69 @@ Unity 内置了基于物理的光照模型函数 `Standard` 和 `StandardSpecula
 - 透明度混合和透明度测试。
   可以通过 `alpha` 和 `alphatest` 指令来控制透明度混合和透明度测试。例如，`alphatest:VariableName` 指令会使用名为 `VariableName` 的变量来剔除不满足条件的片元。
 - 光照。
-  一些指令可以控制光照对物体的影响。`noambient` 参数会告诉 Unity 不要应用任何环境光照或光照探针(light probe)。`novertexlights` 参数告诉 Unity 不要应用任何逐顶点光照。`noforwardadd` 会去掉所有前向渲染中的额外的 Pass。`nolightmap` 、`nofog` 用于控制光照烘焙、雾效模拟。
+  一些指令可以控制光照对物体的影响。`noambient` 参数会告诉 Unity 不要应用任何环境光照或光照探针(light probe)。`novertexlights` 参数告诉 Unity 不要应用任何逐顶点光照。`noforwardadd` 会去掉所有前向渲染中的额外的 Pass。`nolightmap`、`nofog` 用于控制光照烘焙、雾效模拟。
 - 控制代码的生成。
   一些指令还可以控制由表面着色器自动生成的代码。如 `exclude_path:deferred`、`exclude_path:forward`和`exclude_path :prepass` 制定不需要为某些渲染路径生成代码。
+
+### 结构体 Input 和 SurfaceOutput
+
+一个表面着色器需要使用两个结构体：表面函数的输入结构体 `Input`, 以及存储了表面属性 的结构体 `SurfaceOutput` (Unity 5 新引入了另外两个同种的结构体 `SurfaceOutputStandard` 和 `SurfaceOutputStandardSpecular`)。
+
+#### Input 结构体
+
+`Input` 结构体包含了许多**表面属性**的数据来源，因此，它会作为表面函数的输入结构体（如果自定义了顶点修改函数，它还会是顶点修改函数的输出结构体）。`Input` 支持很多内置的变量名，通过这些变量名，我们告诉 Unity 需要使用的数据信息。一个例外情况是，自定义了顶点修改函数，并需要向表面函数中传递自定义的数据，这需要在顶点修改函数中自行计算相关参数。
+
+_**Input 结构体中内置的变量**_
+
+| 变量 | 描述 |
+| --- | ----|
+| `float2 uv_MainTex` | 包含了主纹理的采样坐标 |
+| `float2 uv_BumpMap` | 包含了法线纹理的采样坐标 |
+| `float3 viewDir` | 包含了视角方向，可用于计算边缘光照等 |
+| 使用 `COLOR` 语义定义的 `float4` 变量 | 包含了插值后的逐顶点颜色 |
+| `float4 screenPos` | 包含了屏幕空间的坐标，可以用于反射或屏幕特效 |
+| `float3 worldPos` | 包含了世界空间下的位置 |
+| `float3 worldRefl` | 包含了世界空间下的反射方向。前提是没有修改表面法线`o.Normal` |
+| `float3 worldRefl; INTERNAL_DATA`  | 如果修改了表面法线 `o.Normal`, 需要使用该变量告诉 Unity 要基于修改后的法线计算世界空间下的反射方向。在表面函数中，我们需要使用 `WorldReflectionVector(IN, o.Normal)` 来得到世界空间下的反射方向 |
+| `float3 worldNormal` | 包含了世界空间的法线方向。前提是没有修改表面法线`o.Normal` |
+| `float3 worldNormal; INTERNAL_DATA` | 如果修改了表面法线 `o.Normal`, 需要使用该变量告诉Unity要基于修改后的法线计算世界空间下的法线方向。在表而函数中，我们需要使用 `WorldNormalVector(IN, o.Normal)` 来得到世界空间下的法线方向 |
+
+#### SurfaceOutput 结构体
+
+`SurfaceOutput`、`SurfaceOutputStandard` 和 `SurfaceOutputStandardSpecular` 结构体用于存储表面属性, 它会作为表面函数的输出，随后会作为光照函数的输入来进行各种光照计算。这个结构体里面的变量是提前就声明好的，不可以增加也不会减少。
+
+如果使用了非基于物理的光照模型(`Lambert` 和 `BlinnPhong`)，我们通常会使用 `SurfaceOutput` 结构体， 而如果使用了基于物理的光照模型 `Standard` 或 `StandardSpecular`，会分别使用 `SurfaceOutputStandard` 或 `SurfaceOutputStandardSpecular` 结构体。
+
+`SurfaceOutputStandard` 结构体用于默认的金属工作流程(Metallic Workflow)，对应了 `Standard` 光照函数
+`SurfaceOutputStandardSpecuJar` 结构体用于高光工作流程(Specular Workflow)，对应了 `StandardSpecular` 光照函数。
+
+```cs
+struct SurfaceOutput {
+  fixed3 Albedo; // 对光源的反射率。通常由纹理采样和颜色属性的乘积计算而得。
+  fixed3 Normal; // 表面法线方向。
+  fixed3 Emission; // 自发光。
+  half Specular; // 高光反射中的指数部分的系数，影响高光反射的计算。
+  fixed Gloss; // 高光反射中的强度系数
+  fixed Alpha; // 透明通道。
+};
+
+struct SurfaceOutputStandard {
+  fixed3 Albedo; // base (diffuse or specular) color
+  fixed3 Normal; // tangent space normal, if written
+  half3 Emission;
+  half Metallic; // 0=non-metal, 1=metal
+  half Smoothness; // 0=rough, 1=smooth
+  half Occlusion; // occlusion(default 1)
+  fixed Alpha; // alpha for transparencies
+};
+
+struct SurfaceOutputStandardSpecular {
+  fixed3 Albedo; // diffuse color
+  fixed3 Specular; // specular color
+  fixed3 Normal; // tangent space normal, if written
+  half3 Emission;
+  half Smoothness; // 0=rough, 1=smooth
+  half Occlusion; // occlusion(default 1)
+  fixed Alpha; // alpha for transparencies
+};
+```
