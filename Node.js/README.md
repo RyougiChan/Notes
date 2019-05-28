@@ -177,3 +177,71 @@ Hello World!
 
     exports.route = route;
     ```
+
+4. 以非阻塞操作进行请求响应
+
+    > server.js
+
+    ```js
+    const http = require('http');
+    const url = require('url');
+
+    const start = (route, handle) => {
+        http.createServer((req, res) => {
+            let pathname = url.parse(req.url).pathname;
+            console.log('Request Received, pathname: ', pathname);
+            // 将 `response` 作为参数传到处理程序
+            route(handle, pathname, res);
+        }).listen(8888);
+        console.log('Server Started');
+    };
+
+    exports.start = start;
+    ```
+
+    > router.js
+
+    ```js
+    const route = (handle, pathname, response) => {
+        console.log('route for', pathname);
+        if (typeof handle[pathname] === 'function') {
+            handle[pathname](response);
+        } else {
+            console.log("No request handler found for " + pathname);
+            response.writeHead(404, { "Content-Type": "text/plain" });
+            response.write("404 Not found");
+            response.end();
+        }
+    };
+
+    exports.route = route;
+    ```
+
+    > requestHandlers.js
+
+    ```js
+    /*
+     * 使用 exec 只是为了实现一个非阻塞操作
+     * 它从Node.js来执行一个shell命令。
+     */
+    const exec = require("child_process").exec;
+
+    const start = (response) => {
+        console.log("Request handler 'start' was called.");
+        exec("tree", (error, stdout, stderr) => {
+            response.writeHead(200, {"Content-Type": "text/plain"});
+            response.write(stdout);
+            response.end();
+        });
+    };
+
+    const upload = (response) => {
+        console.log("Request handler 'upload' was called.");
+        response.writeHead(200, {"Content-Type": "text/plain"});
+        response.write("Hello Upload");
+        response.end();
+    };
+
+    exports.start = start;
+    exports.upload = upload;
+    ```
