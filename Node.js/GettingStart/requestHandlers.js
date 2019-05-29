@@ -1,7 +1,8 @@
 const querystring = require("querystring"),
-    fs = require("fs");
+    fs = require("fs"),
+    formidable = require('formidable');
 
-const start = (response, postData) => {
+const start = (response, request) => {
     response.writeHead(200, {"Content-Type": "text/html"});
     response.write(
         `
@@ -10,9 +11,9 @@ const start = (response, postData) => {
                 <meta http-equiv="Content-Type" content="text/html;charset=UTF-8" />
             </head>
             <body>
-                <form action="/upload" method="post">
-                    <textarea name="text" rows="20" cols="60"></textarea>
-                    <input type="submit" value="Submit text" />
+                <form action="/upload" enctype="multipart/form-data" method="post">
+                    <input type="file" name="upload" multiple="multiple" />
+                    <input type="submit" value="Upload file" />
                 </form>
             </body>
         </html>
@@ -21,16 +22,24 @@ const start = (response, postData) => {
     response.end(); 
 };
 
-const upload = (response, postData) => {
+const upload = (response, request) => {
     console.log("Request handler 'upload' was called.");
-    response.writeHead(200, {"Content-Type": "text/plain"});
-    response.write(querystring.parse(postData).text);
-    response.end();
+    
+    let form = new formidable.IncomingForm();
+    form.uploadDir = __dirname;
+    form.parse(request, (err, fields, files) => {
+        console.log('parsing done');
+        fs.renameSync(files.upload.path, 'test.png');
+        
+        response.writeHead(200, {"Content-Type": "text/html"});
+        response.write('<img src="/show" />');
+        response.end();
+    });
 };
 
-const show = (response, postData) => {
+const show = (response, request) => {
     console.log("Request handler 'show' was called.");
-    fs.readFile("/tmp/test.png", "binary", (error, file) => {
+    fs.readFile("test.png", "binary", (error, file) => {
         if(error) {
             response.writeHead(500, {"Content-Type": "text/plain"});
             response.write(error + "\n");
