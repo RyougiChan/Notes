@@ -178,3 +178,24 @@ app.get('/example/c', [cb0, cb1, cb2], function (req, res, next) {
 | [`res.send()`](http://www.expressjs.com.cn/en/4x/api.html#res.send) | 发送各种类型的响应 |
 | [`res.sendFile()`](http://www.expressjs.com.cn/en/4x/api.html#res.sendFile) | 将文件作为八位字节流发送 |
 | [`res.sendStatus()`](http://www.expressjs.com.cn/en/4x/api.html#res.sendStatus) | 设置响应状态代码并将其字符串表示形式作为响应主体发送 |
+
+### 链式路由
+
+可使用 `app.route(PATH)` 方法来创建一个链式路由。
+
+```js
+app.route('/book')
+  .get(function (req, res) {
+    res.send('Get a random book')
+  })
+  .post(function (req, res) {
+    res.send('Add a book')
+  })
+  .put(function (req, res) {
+    res.send('Update the book')
+  })
+```
+
+### express.Router
+
+使用 `express.Router` 类创建模块化，可安装的路由处理程序。
