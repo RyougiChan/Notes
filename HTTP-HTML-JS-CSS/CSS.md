@@ -36,3 +36,25 @@
 - `::first-letter` 伪元素，选择块元素第一行的第一个字母
 - `::first-line` 伪元素，选择块元素的第一行
 - `X:after, X::after` `after` 伪元素，选择元素虚拟子元素（元素的最后一个子元素），CSS3中 `::` 表示伪元素
+
+## display:none 和 visibility:hidden 比较
+
+1. `display:none` 会把节点从文档渲染树中移除，不占据空间
+   `visibility:hidden` 不会将节点移出渲染树，依旧会占据空间
+2. `display:none` 不是继承属性，父元素设置 `display:none` 后无论如何子元素也会从渲染树中消失；
+   `visibility:hidden` 是继承属性，父元素设置 `visibility:hidden` 后子元素设置 `visibility:visible` 后子元素可视
+3. **`display:none` 会造成文档重排，而 `visibility:hidden` 只会使设置的元素重绘**
+4. 读屏器会读取设置 `visibility:visible` 元素的内容，不会读取设置 `display:none` 元素的内容
+
+## CSS 样式文件的引入方式 link/@import
+
+区别项 | `<link>` | `@import`
+----- | -------- | ---------
+从属关系 | HTML 提供的标签，不仅可以加载 CSS 文件，还可以定义 RSS、rel 连接属性等 | CSS 提供的语法规则，只有导入样式表的作用
+加载顺序 | 加载页面时，`<link>` 标签引入的 CSS 被**同时加载**，且最大限度支持并行下载 | `@import` 引入的 CSS 将在页面**加载完毕后**被加载，`@import` 过多嵌套导致串行下载，出现 `FOUC(Flash Of Unstyled Content )`
+兼容性   | `<link>` 标签作为 HTML 元素，不存在兼容性问题 | **CSS2.1** 引入，只可在 IE5+ 使用
+DOM可控性 | 可以通过 JS 操作 DOM ，插入 `<link>` 标签来改变样式 | 无法使用 `@import` 的方式插入样式
+
+> FOUC, Flash Of Unstyled Content: 加载一个网页时，首先会出现一些内容，但是样式并没有完全加载好过一段时间后样式才发生变换。导致的原因可能是在文档底部加载样式表(如使用 `@import` 加载样式表)，可以通过在 `<head>` 使用 `<link>` 标签加载样式表文件来避免。
+
+## https://www.cnblogs.com/mabelstyle/p/3715891.html

@@ -43,6 +43,20 @@ http 协议作为技术背景的 web 应用程序请求——**应答**模式是
 4. 服务器获得加密 `key` 内容后使用证书私钥解密得到 `key`，使用 `key` 加密(AES 加密)响应的数据并响应给客户端
 5. 浏览器得到响应内容后使用 `key` 解密(AES 解密)得到实际响应数据
 
+```sequence
+participant Client
+participant Server
+Client ->> Server: 1. 请求 https://google.com
+Note right of Server: 2. 证书\ncrt private\ncrt public
+Server -->> Client: 3. 响应证书公钥(crt public)
+Note left of Client: 4. 验证证书有效性\n(无效证书会有 HTTPS 警告)
+Note left of Client: 5. 生成随机 key；\n使用证书公钥(crt public)加密
+Client ->> Server: 6. 发送经过证书加密的 key
+Note right of Server: 7. \n使用证书私钥(crt private)解密得到 key；\n使用 key 加密响应数据
+Server -->> Client: 8. 响应经过 key 加密的数据
+Note left of Client: 9. 使用 key 解密响应数据
+```
+
 ## HTTP 请求报文
 
 > 格式
@@ -212,6 +226,19 @@ Content-Type: text/html; charset=UTF-8
     2. 服务器端收到握手包后给浏览器端发送握手包(SYN-ACK包，`SYN=1,ACK=X+1,Seq=Y`)，进入 `SYN_RECV` 状态
     3. 浏览器端收到握手包后再次给服务端发送握手包(SYN包，`SYN=2,ACK=Y+1`)
     4. 服务器端收到握手包后双方进入 `ESTABLISHED` 状态
+
+    ```sequence
+    participant Client
+    participant Server
+    Client ->> Server: SYN=1,Seq=X
+    Note left of Client: SYN_SENT
+    Server -->> Client: ACK=X+1,SYN=1,Seq=Y
+    Note right of Server: SYN_RECV
+    Client ->> Server: ACK=Y+1,SYN=2
+    Note right of Server: ESTABLISHED
+    Note left of Client: ESTABLISHED
+    ```
+
 6. 浏览器发起 HTTP 请求
 7. 服务器判断请求并做出 HTTP 响应
     1. 若请求头含有 `If-None-Match`/`If-Modified-Since` 头，则判断资源的新鲜度，若新鲜则给浏览器发送 `304` 响应告知浏览器缓存有效
@@ -229,3 +256,19 @@ Content-Type: text/html; charset=UTF-8
     3. 服务器发送关闭握手包(FIN包，`FIN=1,ACK=X+1,Seq=Y`)，浏览器段进入 `LAST_ACK` 状态
     4. 浏览器收到握手包后，最后发送一次握手包(ACK包，`ACK=Y+1,Seq=X+1`)，状态变成 `TIME_WAIT`
     5. 服务器端接收到通知握手包后关闭 TCP 连接，浏览器端一段时间后也关闭 TCP 连接
+
+    ```sequence
+    participant Client
+    participant Server
+    Client ->> Server: FIN=1,ACK=Z,Seq=X
+    Note left of Client: FIN_WAIT_1
+    Server -->> Client: ACK=X+1,Seq=Y
+    Note right of Server: CLOSE_WAIT
+    Note left of Client: FIN_WAIT_2
+    Server -->> Client: FIN=1,ACK=X+1,Seq=Y
+    Note left of Client: LAST_ACK
+    Client ->> Server: ACK=Y+1,Seq=X+1
+    Note left of Client: TIME_WAIT
+    Note right of Server: 关闭 TCP
+    Note left of Client: (一段时间后)关闭 TCP
+    ```
