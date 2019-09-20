@@ -57,4 +57,34 @@ DOM可控性 | 可以通过 JS 操作 DOM ，插入 `<link>` 标签来改变样�
 
 > FOUC, Flash Of Unstyled Content: 加载一个网页时，首先会出现一些内容，但是样式并没有完全加载好过一段时间后样式才发生变换。导致的原因可能是在文档底部加载样式表(如使用 `@import` 加载样式表)，可以通过在 `<head>` 使用 `<link>` 标签加载样式表文件来避免。
 
-## https://www.cnblogs.com/mabelstyle/p/3715891.html
+## CSS 盒模型
+
+![Box Model](https://mdn.mozillademos.org/files/8685/boxmodel-(3).png)
+
+$$
+nodewidth = contentwidth + paddingwidth + borderwidth + marginwidth
+$$
+
+$$
+nodeheight = contentheight + paddingheight + borderheight + marginheight
+$$
+
+> 标准盒模型
+
+$$element.width = contentwidth$$
+
+$$element.height = contentheight$$
+
+> IE 盒模型
+
+$$element.width = contentwidth + paddingwidth + borderwidth$$
+
+$$element.height = contentheight + paddingheight + borderheight$$
+
+### 各种元素的 width height margin padding 特性
+
+1. 块级元素
+2. 行内替换元素
+  `width`, `height`, `margin`, `padding` 都正常显示，遵循标准的盒模型
+3. 行内非替换元素
+  `width`, `height` 不起作用，高度 由 `line-height` 来控制。
