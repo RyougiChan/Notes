@@ -81,7 +81,7 @@ $$element.width = contentwidth + paddingwidth + borderwidth$$
 
 $$element.height = contentheight + paddingheight + borderheight$$
 
-### 各种元素的 width height margin padding 特性
+## 各种元素的 width height margin padding 特性
 
 1. 块级元素
 2. 行内替换元素
@@ -91,7 +91,7 @@ $$element.height = contentheight + paddingheight + borderheight$$
     2. `padding` 左右起作用，上下不会影响行高，但是对于有背景色和内边距的行内非替换元素，背景可以向元素上下延伸，但是行高没有改变。
     3. `margin` 左右作用起作用，上下不起作用，原因在于：行内非替换元素的外边距不会改变一个元素的行高
 
-### css元素的分类
+## css 元素的分类
 
 1. 替换元素和不可替换元素
     1. 替换元素：这些元素往往没有实际的内容(即是一个**空元素**)，由浏览器根据元素的标签和属性，来决定元素的具体显示内容。这些元素包括 `<img>`、`<input>`、`<textarea>`、`<select>`、`<object>`。
@@ -100,7 +100,7 @@ $$element.height = contentheight + paddingheight + borderheight$$
     1. 块级元素：在视觉上被格式化为块的元素，最明显的特征就是它默认在**横向**充满其**父元素**的内容区域，而且在其左右两边没有其他元素，即块级元素默认是独占一行。通过 CSS 设定了浮动（`float`属性，可向左浮动或向右浮动）以及设定显示（`display`）属性为 `block` 或 `list-item` 的元素都是块级元素。
     2. 行内元素：行内元素不形成新内容块，即在其左右可以有其他元素。`display` 属性等于 `inline` 的元素都是行内元素。几乎所有的可替换元素都是行内元素(但可通过设置 `display` 来改变)，例如`<img>`、`<input>`等等。
 
-### CSS 继承属性
+## CSS 继承属性
 
 1. 字体相关属性
     1. `font-family`
@@ -122,7 +122,7 @@ $$element.height = contentheight + paddingheight + borderheight$$
 5. 光标属性
     `cursor`
 
-### IE6 常见 CSS bug 及解决方法
+## IE6 常见 CSS bug 及解决方法
 
 > `!important` 并不覆盖掉在同一条样式的后面的规则。
 
@@ -202,3 +202,41 @@ div {
 
 1. 去掉子元素的 `position: relative;`
 2. 为父元素设置 `position: relative;`
+
+## BFC(block formatting context)块级格式化上下文
+
+块格式化上下文(Block Formatting Context, **BFC**) 是 Web 页面的可视化 CSS 渲染的一部分，是**块级盒子 (Block-level box)** 的布局过程发生的区域，也是**浮动 (float) 元素**与其他元素交互的区域。
+
+> **Formatting context** 是 W3C CSS2.1 规范中的一个概念。它是页面中的一块渲染区域，并且有一套渲染规则，它决定了其子元素将如何定位，以及和其他元素的关系和相互作用。最常见的 Formatting context 有 **Block fomatting context(BFC)** 和 **Inline formatting context(IFC)**。
+
+- BFC 的特点
+  1. 在 BFC 中，内部的 **块级盒子 (Block-level box)** 会在垂直方向上一个一个依次放置
+  2. 在 BFC 中，**块级盒子 (Block-level box)** 间的距离由 `margin` 控制，且同一个 BFC 下两个块级盒子的 `margin` 会重叠(外边距塌陷)
+  3. 在 BFC 中，每一个盒子的 _左外边缘(margin-left)_ 会触碰到容器的 _左内边缘(border-left)_ （对于从右到左的格式来说，则触碰到右边缘）
+  4. BFC 不会与外部的浮动元素重叠
+  5. 在 BFC 中，浮动元素也参与 BFC 的高度计算
+  6. BFC 是页面上的一个隔离的独立容器，容器里面的子元素不会影响到外面的元素
+- BFC 的作用
+  1. 清除内部浮动影响
+  2. 防止元素与浮动元素重叠，可以用来自适应两栏布局
+  3. 防止外边距塌陷（不常用，布局的时候两个盒子间只设置一个垂直方向的 `margin` 就可解决）
+- BFC 的创建
+  1. 根元素
+  2. 浮动元素（`float` 属性值不为 `none`）
+  3. 绝对定位（`position: absolute`）元素和固定定位（`position: fixed`）元素
+  4. `overflow` 不为 `visibile` 的元素
+  5. `display` 为 `inline-block, table-cell, table-caption, flex, inline-flex` 的元素
+
+## display,float,position 的作用顺序
+
+1. 元素设置 `display:none;`，`float`, `position` 将不起作用，且不产生框
+2. 元素 `display` 值不为 `none`，如设置 `position:absolute;` 或 `position:fixed;`，框为绝对定位，此时 `float` 的计算属性(computed property) 值为 `none`。**display 根据下面的表格进行调整**。
+3. 元素 `position` 计算属性值不为 `absolute` 或 `fixed`，`float` 值不为 `none`，框浮动。**display 根据下面的表格进行调整**。
+4. 如果元素是根元素，**display 根据下面的表格进行调整**。
+5. 剩余情况下 `display` 的值为指定值
+
+指定值 | 计算值
+----- | -----
+`inline-table` | `table`
+`inline`,`table-row-group`,`table-column`,`table-column-group`,`table-header-group`,`table-footer-group`,`table-row`,`table-cell`,`table-caption`,`inline-block` | `block`
+`others` | (同指定值)
