@@ -91,7 +91,7 @@ $$element.height = contentheight + paddingheight + borderheight$$
     2. `padding` 左右起作用，上下不会影响行高，但是对于有背景色和内边距的行内非替换元素，背景可以向元素上下延伸，但是行高没有改变。
     3. `margin` 左右作用起作用，上下不起作用，原因在于：行内非替换元素的外边距不会改变一个元素的行高
 
-## css 元素的分类
+## CSS 元素的分类
 
 1. 替换元素和不可替换元素
     1. 替换元素：这些元素往往没有实际的内容(即是一个**空元素**)，由浏览器根据元素的标签和属性，来决定元素的具体显示内容。这些元素包括 `<img>`、`<input>`、`<textarea>`、`<select>`、`<object>`。
@@ -240,3 +240,87 @@ div {
 `inline-table` | `table`
 `inline`,`table-row-group`,`table-column`,`table-column-group`,`table-header-group`,`table-footer-group`,`table-row`,`table-cell`,`table-caption`,`inline-block` | `block`
 `others` | (同指定值)
+
+## 清除浮动(clearfix)的方法
+
+1. 在容器闭合标签之前添加一个设置CSS `clear:both` 属性的元素(出现冗余元素)。
+2. 父元素触发 **[块级格式化上下文(BFC)](#BFC(block%20formatting%20context)块级格式化上下文)** 可清除内部浮动的影响。
+3. 设置容器元素伪元素(推荐方法[SEE ALSO](http://nicolasgallagher.com/micro-clearfix-hack/))，已知支持 `Firefox 3.5+, Safari 4+, Chrome, Opera 9+, IE 6+`。
+
+```css
+/**
+ * 在标准浏览器下
+ * 1 content 内容为空格用于修复 opera 下文档中出现
+ *   contenteditable 属性时在清理浮动元素上下的空白
+ * 2 使用 display 使用 table 而不是 block：可以防止容器和
+ *   子元素 top-margin 折叠，这样能使清理效果与 BFC，IE6/7
+ *   zoom: 1;一致
+ */
+.cf:before,
+.cf:after {
+    content: " "; /* 1 */
+    display: table; /* 2 */
+}
+
+.cf:after {
+    clear: both;
+}
+
+/**
+ * IE 6/7 下使用
+ * 通过触发 hasLayout 实现包含浮动
+ */
+.cf {
+    *zoom: 1;
+}
+```
+
+## 包含块(Containing Block)
+
+ref: [https://developer.mozilla.org/en-US/docs/Web/CSS/Containing_block](https://developer.mozilla.org/en-US/docs/Web/CSS/Containing_block)
+
+### 确定包含块
+
+确定一个元素的包含块的过程完全依赖于这个元素的 `position` 属性
+
+`position` | Containing Block
+---------- | ----------------
+`static`,`relative` | 由它的最近的祖先块元素（比如说`inline-block`, `block` 或 `list-item`元素）或格式化上下文(比如说 `table`, `flex`, `grid`, `block` 容器自身)的内容区的边缘组成
+`absolute` | 由它的最近的 `position` 的值不是 `static` （也就是值为 `fixed`, `absolute`, `relative` 或 `sticky`）的祖先元素的内边距区的边缘组成
+`fixed`    | 在连续媒体的情况下(continuous media)包含块是 `viewport` ,在分页媒体(paged media)下的情况下包含块是**分页区域**(page area)
+
+如果 `position` 是 `absolute` 或 `fixed`，它的包含块也可能是由满足以下条件的最近祖先元素的 `padding` 块的边缘组成。
+
+1. `transform` 或 `perspective` 属性值不是 `none`
+2. `will-change` 属性值为 `transform` 或 `perspective`
+3. `filter` 属性值不为 `none` 或 `will-change` 属性值为 `filter`(仅适用于Firefox)
+4. `contain` 属性值为 `paint`(`contain: paint;`)
+
+### 根据包含块计算百分值
+
+1. `height`, `top` 及 `bottom` 的百分值通过包含块的 `height` 的值计算。如果包含块的 `height` 值会根据它的内容变化，而且包含块的 `position` 属性的值被赋予 `relative` 或 `static` ，那么这些值的计算值为 `0`。
+2. `width`, `left`, `right`, `padding`, `margin` 这些属性值由包含块的 `width` 属性的值来计算。
+
+## 堆叠上下文(The stacking context)
+
+Ref: [https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Positioning/Understanding_z_index/The_stacking_context](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Positioning/Understanding_z_index/The_stacking_context)
+
+在满足以下条件的情况下，堆叠上下文由文档中的任何元素在文档中的任何位置形成：
+
+1. 文档根元素 `<html>`
+2. 元素的 `position` 属性值为 `absolute` 或 `relative` 并且 `z-index` 的属性值不为 `auto`
+3. 元素的 `position` 属性值为 `fixed` 或 `sticky`(`sticky` 适用于所有移动版浏览器)
+4. 元素是 **flex 容器(flexbox)** 的子元素并且 `z-index` 的属性值不为 `auto`
+5. 元素是 **网格容器(grid container)** 的子元素并且 `z-index` 的属性值不为 `auto`
+6. 元素的 `opacity` 属性值小于 `1`
+7. 元素的 `mix-blend-mode` 属性值不为 `normal`
+8. 元素具有以下任意一个属性，属性值不为 `none`
+    1. `transform`
+    2. `filter`
+    3. `perspective`
+    4. `clip-path`
+    5. `mask / mask-image / mask-border`
+9. 元素设置了 CSS 属性 `isolation: isolate;`
+10. 元素设置了 CSS 属性 `-webkit-overflow-scrolling: touch;`
+11. 元素的 `will-change` 属性值设置为在非初始值上创建堆栈上下文的**属性**
+12. 元素设置了 CSS 属性 `contain`，且其值为 `layout`, `paint` 或包含其中任何一个的复合值(如：`contain: strict, contain: content`)
