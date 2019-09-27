@@ -211,7 +211,7 @@ div {
 
 - BFC 的特点
   1. 在 BFC 中，内部的 **块级盒子 (Block-level box)** 会在垂直方向上一个一个依次放置
-  2. 在 BFC 中，**块级盒子 (Block-level box)** 间的距离由 `margin` 控制，且同一个 BFC 下两个块级盒子的 `margin` 会重叠(外边距塌陷)
+  2. 在 BFC 中，**块级盒子 (Block-level box)** 间的距离由 `margin` 控制，且同一个 BFC 下两个块级盒子垂直方向上的 `margin` 会重叠(外边距塌陷)
   3. 在 BFC 中，每一个盒子的 _左外边缘(margin-left)_ 会触碰到容器的 _左内边缘(border-left)_ （对于从右到左的格式来说，则触碰到右边缘）
   4. BFC 不会与外部的浮动元素重叠
   5. 在 BFC 中，浮动元素也参与 BFC 的高度计算
@@ -324,3 +324,152 @@ Ref: [https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Positioning/Understan
 10. 元素设置了 CSS 属性 `-webkit-overflow-scrolling: touch;`
 11. 元素的 `will-change` 属性值设置为在非初始值上创建堆栈上下文的**属性**
 12. 元素设置了 CSS 属性 `contain`，且其值为 `layout`, `paint` 或包含其中任何一个的复合值(如：`contain: strict, contain: content`)
+
+## 水平居中元素
+
+1. 水平居中常规流中 `inline` 的元素：
+    为父元素设置 `text-align:center`
+2. 水平居中常规流中 `block` 的元素：
+    设置元素宽度 `width`，设置 `margin` 属性 `margin: 0 auto;`(IE6 需要先为父元素设置 `text-align: center`，再为元素本身修改为需要的值)
+3. 水平居中浮动元素(设置了 `float` 且不为 `none`)：
+    设置元素宽度 `width`，设置 `position:relative;`，设置左(右)偏移量 `left:50%;`，设置左外边距为宽度的一半乘以 `-1`
+
+    ```css
+    div {
+        width: 100px;
+        height: 100px;
+        background-color: aquamarine;
+        float: left;
+        position: relative;
+        left: 50%;
+        margin-left: -50px;
+    }
+    ```
+
+4. 水平居中绝对定位元素
+    1. 设置元素宽度 `width`，设置左(右)偏移量 `left:50%;`，设置左边距为宽度的一半乘以 `-1`
+
+        ```css
+        div {
+            width: 100px;
+            height: 100px;
+            background-color: aquamarine;
+            position: absolute;
+            left: 50%;
+            margin-left: -50px;
+        }
+        ```
+
+    2. 设置元素宽度 `width`，设置左右偏移量为 0 `left:0; right:0;`，设置左右外边距为 auto `margin:0 auto`
+
+        ```css
+        div {
+            width: 100px;
+            height: 100px;
+            background-color:blueviolet;
+            position: absolute;
+            left: 0;
+            right: 0;
+            margin: auto;
+        }
+        ```
+
+## 垂直居中元素
+
+1. 垂直居中绝对定位元素
+
+    ```css
+    div {
+        width: 100px;
+        height: 100px;
+        background-color:blueviolet;
+        overflow: auto; /* 建议设置，防止内容越界溢出 */
+        position: absolute;
+        /*
+        设置 top: 0; left: 0; bottom: 0; right: 0;
+        将给浏览器重新分配一个边界框，此时该块block将填充
+        其父元素的所有可用空间
+        */
+        top: 0;
+        bottom: 0;
+        margin: auto; /* equals to margin-top:0; margin-bottom:0 */
+    }
+    ```
+
+2. 负外边距
+
+    ```css
+    div {
+        width: 100px;
+        height: 100px;
+        position: absolute;
+        top: 50%;
+        margin-top: -50px;
+    }
+    ```
+
+3. 使用 `transform`
+
+    ```css
+    div {
+        position: absolute;
+        top: 50%;
+        -webkit-transform: translate(0,-50%);
+        -ms-transform: translate(0,-50%);
+        transform: translate(0,-50%);
+    }
+    ```
+
+4. 利用表格单元格(`table-cell`)
+
+    ```html
+    <div class="Center-Container is-Table">
+    <div class="Table-Cell">
+        <div class="Center-Block">
+        <!-- CONTENT -->
+        </div>
+    </div>
+    </div>
+    ```
+
+    ```css
+    .Center-Container.is-Table { display: table; }
+    .is-Table .Table-Cell {
+        display: table-cell;
+        vertical-align: middle;
+    }
+    .is-Table .Center-Block {
+        width: 50%;
+        margin: 0 auto;
+    }
+    ```
+
+5. 利用行内块元素(`inline-block`)
+
+    ```html
+    <div class="b" id="b6">
+    <div class="inner"></div>
+    </div>
+    ```
+
+    ```css
+    #b6::after,
+    #b6 > .inner {
+        display: inline-block;
+        vertical-align: middle;
+    }
+    #b6::after {
+        content: ' ';
+        height: 100%;
+    }
+    ```
+
+6. 使用 CSS3 的 Flexbox
+
+    ```css
+    div {
+        display: -webkit-flex;
+        display: flex;
+        align-items: center;
+    }
+    ```
