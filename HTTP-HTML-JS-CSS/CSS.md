@@ -46,7 +46,7 @@
 3. **`display:none` 会造成文档重排，而 `visibility:hidden` 只会使设置的元素重绘**
 4. 读屏器会读取设置 `visibility:visible` 元素的内容，不会读取设置 `display:none` 元素的内容
 
-## CSS 样式文件的引入方式 link/@import
+## CSS 样式文件的引入方式 link|@import
 
 区别项 | `<link>` | `@import`
 ----- | -------- | ---------
@@ -81,7 +81,7 @@ $$element.width = contentwidth + paddingwidth + borderwidth$$
 
 $$element.height = contentheight + paddingheight + borderheight$$
 
-## 各种元素的 width height margin padding 特性
+## 各种元素的 width|height|margin|padding 特性
 
 1. 块级元素
 2. 行内替换元素
@@ -227,7 +227,7 @@ div {
   4. `overflow` 不为 `visibile` 的元素
   5. `display` 为 `inline-block, table-cell, table-caption, flex, inline-flex` 的元素
 
-## display,float,position 的作用顺序
+## display|float|position 的作用顺序
 
 1. 元素设置 `display:none;`，`float`, `position` 将不起作用，且不产生框
 2. 元素 `display` 值不为 `none`，如设置 `position:absolute;` 或 `position:fixed;`，框为绝对定位，此时 `float` 的计算属性(computed property) 值为 `none`。**display 根据下面的表格进行调整**。
@@ -424,16 +424,18 @@ Ref: [https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Positioning/Understan
 
     ```html
     <div class="Center-Container is-Table">
-    <div class="Table-Cell">
-        <div class="Center-Block">
-        <!-- CONTENT -->
+        <div class="Table-Cell">
+            <div class="Center-Block">
+            <!-- CONTENT -->
+            </div>
         </div>
-    </div>
     </div>
     ```
 
     ```css
-    .Center-Container.is-Table { display: table; }
+    .Center-Container.is-Table {
+        display: table;
+    }
     .is-Table .Table-Cell {
         display: table-cell;
         vertical-align: middle;
