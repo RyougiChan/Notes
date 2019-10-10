@@ -3,7 +3,7 @@
 ## cookie|session|localStorage|sessionStorage
 
 1. `cookie`
-    解决 http 的无状态问题，是客户端保存用户信息的一种机制，用来记录用户的一些信息，来实现session的跟踪。 cookie 的同源是域名相同，忽略协议和端口，不可跨域。它的大小限制为4KB左右。
+    解决 http 的无状态问题，是客户端保存用户信息的一种机制，用来记录用户的一些信息，来实现 session的跟踪。 cookie 的同源是域名相同，忽略协议和端口，不可跨域。它的大小限制为4KB左右。浏览器不能保存超过 300 个 cookie，单个服务器不能超过 20 个。
 
     | 属性名 |     意义        |
     | ----- |     ---        |
@@ -34,3 +34,26 @@
 | 可存数据大小 | ≈4k | ≈5M | ≈5M |
 | 与服务器通信 | 每次都会携带在 HTTP 头中，若使用 cookie 保存过多数据会有性能问题 | 仅在客户端中保存，不参与服务器通信 | 仅在客户端中保存，不参与服务器通信 |
 | 使用方法    | 原生 cookie 接口不友好，[`document.cookie`](https://developer.mozilla.org/en-US/docs/Web/API/Document/cookie) | [`[window.]localStorage`](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage) | [`[window.]sessionStorage`](https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage) |
+
+## Element.getAttribute(attributeName) 和 Element.attributeName
+
+[1]: Element.getAttribute(attributeName), [2]: Element.attributeName
+
+| [1] | [2] |
+| --- | --- |
+| 标准 DOM 操作文档元素属性的方法，**具有通用性**，可在**任意文档**上使用，返回元素在**源文件**中设置的属性 | 在 **HTML 文档**中访问浏览器解析元素后生成对应对象的标准特性对应的属性，无法访问没有对应特性的属性 |
+| 返回值类型为 `string`/`null`/`''` | 返回值类型可为 `string`/`true|flase`/`object`/`undefined`/`number` 等 |
+
+[1] 通过 `setAttribute('value', '')` 设置 `<input>` 的属性值不会改变 `<input>` 的 `value` 值。
+[2] 无法感知部分布尔值如 `<input hidden />`，需要使用 `hasAttribute('hidden')` 判断。
+
+## JS 的数据类型(最新的ECMAScript标准)
+
+  1. Boolean
+  2. Null
+  3. Undefined
+  4. Number
+  5. BigInt
+  6. String
+  7. Symbol
+  8. [Object](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures)
