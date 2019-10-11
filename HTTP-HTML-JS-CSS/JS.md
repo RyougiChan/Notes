@@ -57,3 +57,226 @@
   6. String
   7. Symbol
   8. [Object](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures)
+
+## JS 事件模型
+
+[ref](https://www.quirksmode.org/js/events_order.html)
+
+1. 两大事件模型
+    1. 事件捕获
+
+        ```plain
+                    ||
+        ---------------||-----------------
+        | element1     ||                |
+        |   -----------||-----------     |
+        |   |element2  \/          |     |
+        |   ------------------------     |
+        |        Event CAPTURING         |
+        ----------------------------------
+        ```
+
+    2. 事件冒泡
+
+        ```plain
+                       /\
+        ---------------||-----------------
+        | element1     ||                |
+        |   -----------||-----------     |
+        |   |element2  ||          |     |
+        |   ------------------------     |
+        |        Event BUBBLING          |
+        ----------------------------------
+        ```
+
+        阻止事件冒泡
+
+        ```js
+        // 1. for microsoft model
+        window.event.cancelBubble = true
+
+        // 2. for W3C model
+        e.stopPropagation()
+
+        // eg.
+        function doSomething(e)
+        {
+            if (!e) var e = window.event;
+            e.cancelBubble = true;
+            if (e.stopPropagation) e.stopPropagation();
+        }
+        ```
+
+2. W3C 事件模型
+
+> W3C 事件模型中发生的任何事件都**首先被捕获**，直到到达目标元素，**然后再次冒泡**。
+
+```plain
+                 ||  /\
+-----------------||--||-----------------
+| element1       ||  ||                |
+|   -------------||--||-----------     |
+|   |element2    \/  ||          |     |
+|   ------------------------------     |
+|        W3C event model               |
+----------------------------------------
+```
+
+## focus/blur 与 focusin/focusout
+
+`focus/blur` 不会冒泡而 `focusin/focusout` 冒泡，如果需要实现事件委托，可通过在支持的浏览器上使用 `focusin/focusout` 事件 (除了 Firefox 之外的所有浏览器)，或者通过使用 `focus/blur` 并设置 `addEventListener` 的参数 `useCapture` 值为 `true`
+
+```js
+const form = document.getElementById('form');
+
+form.addEventListener('focus', (event) => {
+    event.target.style.background = 'pink';
+}, true);
+
+form.addEventListener('blur', (event) => {
+    event.target.style.background = '';
+}, true);
+```
+
+## mouseenter/mouseleave 与 mouseover/mouseout
+
+| `mouseover/mouseout` | `mouseenter/mouseleave` |
+| ------------------ | --------------------- |
+| 标准事件，所有浏览器都支持 | IE5.5 引入的特有事件后来被 DOM3 标准采纳，现代标准浏览器也支持 |
+| 冒泡事件(需要为多个元素监听鼠标移入/出事件时，推荐使用 `mouseover/mouseout` 托管，提高性能) | 非冒泡事件 |
+
+1. `event.target` 表示发生移入/出的元素，`event.relatedTarget` 对应移出/入的元素
+2. 旧 IE 中 `event.srcElement` 表示发生移入/出的元素，`event.toElement` 表示移出的目标元素，`event.fromElement` 表示移入时的来源元素
+
+## JS [闭包](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures)
+
+> JavaScript 中的函数会形成闭包。闭包是由**函数**以及创建该函数的**词法环境**组合而成。这个环境包含了这个闭包创建时所能访问的**所有局部变量**。通常使用只有一个方法的对象的地方，都可以使用闭包。
+
+```js
+function makeFunc() {
+    var name = "Mozilla";
+    function displayName() {
+        alert(name);
+    }
+    return displayName;
+}
+
+var myFunc = makeFunc();
+myFunc(); // Mozolla
+```
+
+应用
+
+1. 回调函数
+
+    ```html
+    <a href="#" id="size-12">12</a>
+    <a href="#" id="size-14">14</a>
+    <a href="#" id="size-16">16</a>
+    ```
+
+    ```js
+    function makeSizer(size) {
+    return function() {
+        document.body.style.fontSize = size + 'px';
+    };
+    }
+
+    var size12 = makeSizer(12);
+    var size14 = makeSizer(14);
+    var size16 = makeSizer(16);
+
+    document.getElementById('size-12').onclick = size12;
+    document.getElementById('size-14').onclick = size14;
+    document.getElementById('size-16').onclick = size16
+    ```
+
+2. 模拟私有方法(同时提供了管理全局命名空间的强大能力)
+
+```js
+// 模块模式(module pattern):使用闭包来定义公共函数，并令其可以访问私有函数和变量。
+var makeCounter = function() {
+  var privateCounter = 0;
+  function changeBy(val) {
+    privateCounter += val;
+  }
+  return {
+    increment: function() {
+      changeBy(1);
+    },
+    decrement: function() {
+      changeBy(-1);
+    },
+    value: function() {
+      return privateCounter;
+    }
+  }  
+};
+
+var Counter1 = makeCounter();
+var Counter2 = makeCounter();
+console.log(Counter1.value()); /* logs 0 */
+Counter1.increment();
+Counter1.increment();
+console.log(Counter1.value()); /* logs 2 */
+Counter1.decrement();
+console.log(Counter1.value()); /* logs 1 */
+console.log(Counter2.value()); /* logs 0 */
+```
+
+**性能考量:**如果不是某些特定任务需要使用闭包，在其它函数中创建函数是不明智的，因为**闭包在处理速度和内存消耗方面对脚本性能具有负面影响**。
+
+> 示例1:
+
+```js
+function MyObject(name, message) {
+  this.name = name.toString();
+  this.message = message.toString();
+  // 此处形成闭包
+  // 在创建新的对象或者类时，方法通常应该关联于对象的原型，而不是定义到对象的构造器中
+  // 每次构造器被调用时，方法都会被重新赋值一次
+  this.getName = function() {
+    return this.name;
+  };
+
+  this.getMessage = function() {
+    return this.message;
+  };
+}
+```
+
+> 示例2:
+
+```js
+function MyObject(name, message) {
+  this.name = name.toString();
+  this.message = message.toString();
+}
+// 分离出来，避免使用闭包
+// 继承的原型可以为所有对象共享，不必在每一次创建对象时定义方法
+MyObject.prototype = {
+  getName: function() {
+    return this.name;
+  },
+  getMessage: function() {
+    return this.message;
+  }
+};
+```
+
+> 示例3:
+
+```js
+// 示例2的改进:不建议重新定义原型
+function MyObject(name, message) {
+  this.name = name.toString();
+  this.message = message.toString();
+}
+
+MyObject.prototype.getName = function() {
+  return this.name;
+};
+MyObject.prototype.getMessage = function() {
+  return this.message;
+};
+```
