@@ -148,9 +148,9 @@ form.addEventListener('blur', (event) => {
 1. `event.target` 表示发生移入/出的元素，`event.relatedTarget` 对应移出/入的元素
 2. 旧 IE 中 `event.srcElement` 表示发生移入/出的元素，`event.toElement` 表示移出的目标元素，`event.fromElement` 表示移入时的来源元素
 
-## JS [闭包](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures)
+## JS 闭包
 
-> JavaScript 中的函数会形成闭包。闭包是由**函数**以及创建该函数的**词法环境**组合而成。这个环境包含了这个闭包创建时所能访问的**所有局部变量**。通常使用只有一个方法的对象的地方，都可以使用闭包。
+> JavaScript 中的函数会形成[闭包](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Closures)。闭包是由**函数**以及创建该函数的**词法环境**组合而成。这个环境包含了这个闭包创建时所能访问的**所有局部变量**。通常使用只有一个方法的对象的地方，都可以使用闭包。
 
 ```js
 function makeFunc() {
