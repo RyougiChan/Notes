@@ -1,6 +1,6 @@
 # 前端知识点总结
 
-## 知识点
+## 目录
 
 - [HTTP](HTTP.md)
   - [HTTP 协议的无状态性](HTTP.md#HTTP%20协议的无状态性)
@@ -28,3 +28,13 @@
   - [水平居中元素](CSS.md#水平居中元素)
   - [垂直居中元素](CSS.md#垂直居中元素)
 - [JavaScript](JS.md)
+  - [cookie|session|localStorage|sessionStorage](JS.md#cookie|session|localStorage|sessionStorage)
+  - [Element.getAttribute(attributeName) 和 Element.attributeName](JS.md#Element.getAttribute(attributeName)%20和%20Element.attributeName)
+  - [JS 的数据类型(最新的ECMAScript标准)](JS.md#JS%20的数据类型(最新的ECMAScript标准))
+  - [JS 事件模型](JS.md#JS%20事件模型)
+  - [focus/blur 与 focusin/focusout](JS.md#focus/blur%20与%20focusin/focusout)
+  - [mouseenter/mouseleave 与 mouseover/mouseout](JS.md#mouseenter/mouseleave%20与%20mouseover/mouseout)
+  - [JS 闭包](JS.md#JS%20闭包)
+  - [JS 实现类式继承](JS.md#JS%20实现类式继承)
+  - [用于拓展原型链的方法](JS.md#用于拓展原型链的方法)
+  - [JS 严格模式](JS.md#JS%20严格模式)

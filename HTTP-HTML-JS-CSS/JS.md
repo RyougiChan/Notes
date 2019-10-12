@@ -66,7 +66,7 @@
     1. 事件捕获
 
         ```plain
-                    ||
+                       ||
         ---------------||-----------------
         | element1     ||                |
         |   -----------||-----------     |
@@ -280,3 +280,152 @@ MyObject.prototype.getMessage = function() {
   return this.message;
 };
 ```
+
+## JS 实现类式继承
+
+```js
+// Shape - superclass
+function Shape() {
+  this.x = 0;
+  this.y = 0;
+}
+
+// superclass method
+Shape.prototype.move = function(x, y) {
+  this.x += x;
+  this.y += y;
+  console.info('Shape moved.');
+};
+```
+
+### 父类对象或 `prototype` 的继承
+
+```js
+/*************************************************************************
+ * 优点:
+ *    1. 正确设置原型链实现继承
+ *    2. 父类实例属性得到继承，原型链查找效率提高，也能为一些属性提供合理的默认值
+ * 缺点:
+ *    1. 父类实例属性为引用类型时，不恰当地修改会导致所有子类被修改
+ *    2. 创建父类实例作为子类原型时，可能无法确定构造函数需要的合理参数，这样提供
+ *       的参数继承给子类没有实际意义，当子类需要这些参数时应该在构造函数中进行初
+ *       始化和设置
+ *    3. 继承应该是继承方法而不是属性，为子类设置父类实例属性应该是通过在子类构造
+ *       函数中调用父类构造函数进行初始化
+ *************************************************************************/
+// subclass extends superclass
+Rectangle.prototype = new Shape();
+
+/*************************************************************************
+ * 优点:
+ *    1. 正确设置原型链实现继承
+ * 缺点:
+ *    1. 父类构造函数原型与子类相同。修改子类原型添加方法会修改父类
+ *************************************************************************/
+// or
+// subclass extends superclass
+Rectangle.prototype = Shape.prototype;
+
+var rect = new Rectangle();
+```
+
+### [`Object.create`](https://developer.mozilla.org/en-us/docs/Web/JavaScript/Reference/Global_Objects/Object/create)
+
+优点：能正确设置原型链且避免方法上面实现的缺点
+缺点：`Object.create` 方法在 ES5 中引入，适配低版本浏览器应该考虑兼容性(IE8及以下)，polyfill 如下
+
+```js
+function create(obj) {
+    if (Object.create) {
+        return Object.create(obj);
+    }
+
+    function f() {};
+    f.prototype = obj;
+    return new f();
+}
+```
+
+1. 单继承
+
+    ```js
+    // Rectangle - subclass
+    function Rectangle() {
+      Shape.call(this); // call super constructor.
+    }
+
+    // subclass extends superclass
+    Rectangle.prototype = Object.create(Shape.prototype);
+
+    //If you don't set Object.prototype.constructor to Rectangle,
+    //it will take prototype.constructor of Shape (parent).
+    //To avoid that, we set the prototype.constructor to Rectangle (child).
+    Rectangle.prototype.constructor = Rectangle;
+
+    var rect = new Rectangle();
+    ```
+
+2. 多继承，使用混入(mixins)的方式
+
+    ```js
+    function MyClass() {
+      SuperClass.call(this);
+      OtherSuperClass.call(this);
+    }
+
+    // inherit one class
+    MyClass.prototype = Object.create(SuperClass.prototype);
+    // mixin another
+    Object.assign(MyClass.prototype, OtherSuperClass.prototype);
+    // re-assign constructor
+    MyClass.prototype.constructor = MyClass;
+
+    MyClass.prototype.myMethod = function() {
+      // do something
+    };
+    ```
+
+## 用于拓展原型链的方法
+
+[Ref:4 个用于拓展原型链的方法](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Inheritance_and_the_prototype_chain#%E6%80%BB%E7%BB%93%EF%BC%9A4_%E4%B8%AA%E7%94%A8%E4%BA%8E%E6%8B%93%E5%B1%95%E5%8E%9F%E5%9E%8B%E9%93%BE%E7%9A%84%E6%96%B9%E6%B3%95)
+
+## JS 严格模式
+
+ECMAScript 5 的严格模式是采用具有限制性 JavaScript 变体的一种方式，从而使代码显示地 脱离“马虎模式/稀松模式/懒散模式“（sloppy）模式。
+
+1. 严格模式通过抛出错误来消除了一些原有静默错误。
+    1. 严格模式下无法再意外创建全局变量。
+    2. 严格模式会使引起静默失败(silently fail)抛出异常。
+    3. 严格模式下, 试图删除不可删除的属性时会抛出异常。
+    4. 在严格模式下，对象重名属性被认为是语法错误(这个问题在 ECMAScript6 中已经不复存在)。
+    5. 严格模式要求函数的参数名唯一。
+    6. 严格模式禁止八进制数字语法(ECMAScript并不包含八进制语法, 但所有的浏览器都支持以零`0`头的八进制语法: `0644 === 420` 还有 `"\045" === "%"`.在 ECMAScript 6 中支持为一个数字加 `0o` 的前缀来表示八进制数)。
+    7. ECMAScript 6中的严格模式禁止设置 primitive 的属性.不采用严格模式,设置属性将会简单忽略(no-op),采用严格模式,将抛出 TypeError 错误。
+2. 严格模式修复了一些导致 JavaScript 引擎难以执行优化的缺陷：有时候，相同的代码，严格模式可以比非严格模式下运行得更快。
+    1. 严格模式禁用 `with`.  `with` 所引起的问题是块内的任何名称可以映射(map)到 `with` 传进来的对象的属性, 也可以映射到包围这个块的作用域内的变量(甚至是全局变量), 这一切都是在运行时决定的: 在代码运行之前是无法得知的。
+    2. 严格模式下的 `eval` 不再为上层范围(surrounding scope,注:包围 `eval` 代码块的范围)引入新变量。
+    3. 严格模式禁止删除声明变量。`delete name` 在严格模式下会引起语法错误。
+    4. 严格模式下名称 `eval` 和 `arguments` 不能通过程序语法被绑定(be bound)或赋值。
+
+        ```js
+        // 以下操作会报语法错误
+        "use strict";
+        eval = 17;
+        arguments++;
+        ++eval;
+        var obj = { set p(arguments) { } };
+        var eval;
+        try { } catch (arguments) { }
+        function x(eval) { }
+        function arguments() { }
+        var y = function eval() { };
+        var f = new Function("arguments", "'use strict'; return 17;");
+        ```
+
+    5. 严格模式下，参数的值不会随 `arguments` 对象的值的改变而变化，函数的 `arguments` 对象会保存函数被调用时的原始参数。(在正常模式下，对于第一个参数是 `arg` 的函数，对 `arg` 赋值时会同时赋值给 `arguments[0]`，反之亦然)
+    6. 严格模式下不再支持 `arguments.callee`。
+    7. 在严格模式下通过 `this` 传递给一个函数的值不会被强制转换为一个对象。
+    8. 在严格模式函数或用于调用它们的 `arguments` 对象上，无法访问 `caller`, `callee` 和  `arguments` 属性
+3. 严格模式禁用了在 ECMAScript 的未来版本中可能会定义的一些语法。
+    1. 在严格模式中，一部分字符变成了保留的关键字。这些字符包括 `implements`, `interface`, `let`, `package`, `private`, `protected`, `public`, `static` 和 `yield`
+    2. 严格模式禁止了不在脚本或者函数层面上的函数声明
