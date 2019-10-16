@@ -429,3 +429,306 @@ ECMAScript 5 的严格模式是采用具有限制性 JavaScript 变体的一种�
 3. 严格模式禁用了在 ECMAScript 的未来版本中可能会定义的一些语法。
     1. 在严格模式中，一部分字符变成了保留的关键字。这些字符包括 `implements`, `interface`, `let`, `package`, `private`, `protected`, `public`, `static` 和 `yield`
     2. 严格模式禁止了不在脚本或者函数层面上的函数声明
+
+## 比较算法
+
+### 严格相等比较算法 `===`
+
+[The Strict Equality Comparison Algorithm](http://www.ecma-international.org/ecma-262/5.1/#sec-11.9.6)
+
+比较 `x === y` 的过程:
+
+1. 如果 **Type(x)** 与 **Type(y)** 不同，则返回 `false`。
+2. 如果 **Type(x)** 是 Undefined，则返回 `true`。
+3. 如果 **Type(x)** 为 Null，则返回 `true`。
+4. 如果如果 **Type(x)** 是数字，则
+    1. 如果 x 为 `NaN`，则返回 `false`。
+    2. 如果 y 为 `NaN`，则返回 `false`。
+    3. 如果 x 与 y 相同，则返回 `true`。
+    4. 如果 x 为 `+0` 且 y 为 `-0`，则返回 `true`。
+    5. 如果 x 为 `-0` 且 y 为 `+0`，则返回 `true`。
+    6. 否则返回 `false`。
+5. 如果 **Type(x)** 是 String，则如果 x 和 y 是完全相同的字符序列(相同的长度和相同位置的相同字符)，则返回 `true`；否则，返回 `false`。
+6. 如果 **Type(x)** 为布尔值，则如果 x 和 y 均为 `true` 或均为 `false`，则返回 `true`；否则，返回 `false`。
+7. 如果 x 和 y 指向同一对象，则返回 `true`。否则，返回 `false`。
+
+### 非严格相等比较算法 `==`
+
+[The Abstract Equality Comparison Algorithm](http://www.ecma-international.org/ecma-262/5.1/#sec-11.9.3)
+
+比较 `x == y` 的过程:
+
+1. 如果 **Type(x)** 与 **Type(y)** 相同，则
+    1. 如果 **Type(x)** 是 Undefined，则返回 `true`。
+    2. 如果 **Type(x)** 为 Null，则返回 `true`。
+    3. 如果 **Type(x)** 是数字，则
+        1. 如果 x 为 `NaN`，则返回 `false`。
+        2. 如果 y 为 `NaN`，则返回 `false`。
+        3. 如果 x 与 y 相同，则返回`true`。
+        4. 如果 x 为 `+0` 且 y 为 `−0`，则返回`true`。
+        5. 如果 x 为 `−0` 且 y 为 `+0`，则返回`true`。
+        6. 返回 `false`。
+    4. 如果 **Type(x)** 为 String，则如果 x 和 y 是完全相同的字符序列(相同的长度和相同位置的相同字符)，则返回`true`。否则，返回 `false`。
+    5. 如果 **Type(x)** 为布尔值，则如果 x 和 y 均为 `true`或均为 `false`，则返回 `true`。否则，返回 `false`。
+    6. 如果 x 和 y 指向同一对象，则返回 `true`。否则，返回 `false`。
+2. 如果 x 是 `null` 且 y 是 `undefined`，返回 `true`。
+3. 如果 y 是 `null` 且 x 是 `undefined`，返回 `true`。
+4. 如果 **Type(x)** 是 Number 且 **Type(y)** 是 String，则返回比较结果 `x == ToNumber(y)`。
+5. 如果 **Type(x)** 是 String 且 **Type(y)** 是 Number，则返回比较结果 `ToNumber(x) == y`。
+6. 如果 **Type(x)** 是布尔值，则返回比较结果 `ToNumber(x) == y`。
+7. 如果 **Type(y)** 为布尔型，则返回比较结果 `x == ToNumber(y)`。
+8. 如果 **Type(x)** 是 String 或 Number 且 **Type(y)** 是 Object，则返回比较结果 `x == ToPrimitive(y)`。
+9. 如果 **Type(x)** 是 Object 并且 **Type(y)** 是 String 或 Number，则返回比较结果 `ToPrimitive(x) == y`。
+10. 返回 `false`。
+
+注:
+
+两个 `String` 对象将彼此不相等
+
+```js
+new String("a") == "a"             // true
+"a" == new String("a")             // true
+new String("a") == new String("a") // false
+```
+
+### 同值(SameValue)相等比较算法
+
+[The SameValue Algorithm](http://www.ecma-international.org/ecma-262/5.1/#sec-9.12)
+
+JS 中 `Object.is()` 方法判断两个值是否是相同的值。内部执行如下:
+
+1. 如果 **Type(x)** 与 **Type(y)** 不同，则返回 `false`。
+2. 如果 **Type(x)** 是 Undefined，则返回 `true`。
+3. 如果 **Type(x)** 为 Null，则返回 `true`。
+4. 如果 **Type(x)** 为数字，则
+    1. 如果  x 为 `NaN` 且 y 为 `NaN`，则返回 `true`。
+    2. 如果 x 为 `+0`，y 为 `-0`，则返回 `false`。
+    3. 如果 x 为 `-0` 且 y 为 `+0`，则返回 `false`。
+    4. 如果 x 与 y 相同，则返回 `true`。
+    5. 返回 `false`。
+5. 如果 **Type(x)** 是 String，则如果 x 和 y 是完全相同的字符序列(相同的长度和相同位置的相同字符)，则返回 `true`；否则，返回 `false`。
+6. 如果 **Type(x)** 为布尔值，则如果 x 和 y 均为 `true` 或均为 `false`，则返回 `true`；否则，返回 `false`。
+7. 如果 x 和 y 指向同一对象，则返回 `true` 。否则，返回 `false`。
+
+### `<,>,<=,>=` 的比较规则
+
+1. 如果操作数是对象，转换为原始值：如果 `valueOf` 方法返回原始值，则使用这个值，否则使用 `toString` 方法的结果，如果转换失败则报错
+2. 经过必要的对象到原始值的转换后，如果两个操作数都是字符串，按照字母顺序进行比较(他们的 16 位 unicode 值的大小)
+3. 否则，如果有一个操作数不是字符串，将两个操作数转换为数字进行比较
+
+### `+` 运算符内部运算过程
+
+1. 如果有操作数是对象，转换为原始值
+2. 如果有一个操作数是字符串，其他的操作数都转换为字符串并执行连接
+3. 所有操作数都转换为数字并执行加法
+
+## 几个 JS 内部类型转换算法
+
+### 内部 ToPrimitive 算法
+
+JavaScript 对象转换到基本类型值时，会使用 [ToPrimitive](http://www.ecma-international.org/ecma-262/5.1/#sec-9.1) 算法，这是一个内部算法，是编程语言在内部执行时遵循的一套规则。ToPrimitive 转换规则:
+
+| 输入类型   | 结果 |
+| --------- | --- |
+| Undefined | 和输入参数相同(无转换) |
+| Null      | 和输入参数相同(无转换) |
+| Boolean   | 和输入参数相同(无转换) |
+| Number    | 和输入参数相同(无转换) |
+| String    | 和输入参数相同(无转换) |
+| Object    | 返回对象的默认值。通过调用对象的 [`[[DefaultValue]](hint)`](http://www.ecma-international.org/ecma-262/5.1/#sec-8.12.8) 内部方法并传递可选参数 `hint` 来检索对象的默认值。总结如下 |
+
+> 1. 如果 `hint` 取值是 `"string"`: 如果调用 `obj.toString()` 返回原始值(primary value)，则使用这个值，否则调用 `obj.valueOf()` 来返回原始值
+> 2. `hint` 取值是 `"number"` 或 `"default"` 的情况，如果调用 `obj.valueOf()` 返回原始值(primary value)，则使用这个值，否则调用 `obj.toString()` 来返回原始值
+> 3. 如果 Object 是一个 `Date`，其表现和 `hint` 为 `"string"` 相同
+> 4. 否则最后抛出 `TypeError` 异常
+
+### 内部 ToBoolean 算法
+
+抽象操作 [ToBoolean](http://www.ecma-international.org/ecma-262/5.1/#sec-9.2) 根据下表将其参数转换为 Boolean 类型的值
+
+| 参数类型    | 结果 |
+| --------- | ---- |
+| Undefined | `false` |
+| Null      | `false` |
+| Boolean   | 和输入参数相同(无转换) |
+| Number    | `+0`, `−0`, 或 `NaN` 为 `false`, 其余为 `true` |
+| String    | 空字符串(长度为 0)为 `false`, 否则为 `true` |
+| Object    | `true` |
+
+### 内部 ToNumber 算法
+
+抽象操作 [ToNumber](http://www.ecma-international.org/ecma-262/5.1/#sec-9.3) 将其参数转换为 Number 类型的值
+
+| 参数类型    | 结果 |
+| --------- | ---- |
+| Undefined | `NaN` |
+| Null      | `+0` |
+| Boolean   | `true` 为 `1`, `false` 为 `+0` |
+| Number    | 和输入参数相同(无转换) |
+| String    | 按照[ToNumber 应用于字符串类型](http://www.ecma-international.org/ecma-262/5.1/#sec-9.3.1) 的规则转换 |
+| Object    | 令 primValue 为 [`ToPrimitive(input argument, hint Number)`](#内部%20ToPrimitive%20算法), 返回 `ToNumber(primValue)`。 |
+
+### 内部 ToString 算法
+
+抽象操作 [ToString](http://www.ecma-international.org/ecma-262/5.1/#sec-9.8) 将其参数转换为 String 类型的值
+
+| 参数类型    | 结果 |
+| --------- | ---- |
+| Undefined | `"undefined"` |
+| Null      | `"null"` |
+| Boolean   | `true` 为 `"true"`,`false` 为 `"false"` |
+| Number    | 按照 [ToString 应用于数字类型](http://www.ecma-international.org/ecma-262/5.1/#sec-9.8.1) 处理 |
+| String    | 和输入参数相同(无转换) |
+| Object    | 令 primValue 为 [`ToPrimitive(input argument, hint Number)`](#内部%20ToPrimitive%20算法), 返回 `ToString(primValue)`。 |
+
+## 应用缓存(脱机Web应用程序)
+
+!!此功能仅在安全上下文（HTTPS）中可用，并且当前标准 **[已废弃](https://html.spec.whatwg.org/multipage/offline.html#offline)** 该特性，如需要使用应用程序缓存，目前推荐使用 **[ServiceWorker](https://w3c.github.io/ServiceWorker/#cache-objects)**
+
+### 应用缓存的好处
+
+1. 离线浏览: 用户可以在离线状态下浏览网站内容。
+2. 更快的速度: 因为数据被存储在本地，所以速度会更快。
+3. 减轻服务器的负载: 浏览器只会下载在服务器上发生改变的资源。
+
+### 应用缓存(AppCache)
+
+1. 为 `<html>` 元素设置 `manifest` 属性
+
+    ```html
+    <!-- 
+      .appcache 后缀名只是一个约定
+      真正识别方式是通过 text/cache-manifest 作为文件的 MIME 类型
+    -->
+    <html manifest="example.appcache">
+      ...
+    </html>
+    ```
+
+2. 完整 manifest 文件示例和解释
+
+> 段落标题
+
+| 段落标题 | 解释 |
+| ------- | --- |
+| CACHE   | 切换到缓存清单的显式段落(默认段落)。|
+| NETWORK | 切换到缓存清单的在线白名单段落。表示资源从不缓存 |
+| FALLBACK| 切换到缓存清单的后备资源段落。每行包含两个 URL，第二个 URL 是指需要加载和存储在缓存中的资源，第一个 URL 是一个前缀。任何匹配该前缀的 URL 都不会缓存，如果从网络中载入这样的 URL 失败的话，就会用第二个 URL 指定的缓存资源来替代。|
+
+```yml
+CACHE MANIFEST
+# v1 2011-08-14
+# This is another comment
+index.html
+cache.html
+style.css
+image1.png
+
+# Use from network if available
+NETWORK:
+network.html
+
+# Fallback content
+FALLBACK:
+. fallback.html
+```
+
+## Service Worker
+
+Service Worker 是现代浏览器的一个高级特性，它依赖于 `fetch API`、`Cache Storage`、`Promise` 等，其中，`Cache` 提供了 `Request/Response` 对象的存储机制，`Cache Storage` 存储多个 `Cache`。
+
+### Service Worker 的应用
+
+1. 用于浏览器缓存
+2. 实现离线 Web APP
+3. 消息推送
+
+### 在 JavaScript 主线程中引入 Service Worker
+
+```js
+if ('serviceWorker' in navigator) {
+  // 1. 如果 Service Worker 被注册到 /xxx/ServerWorker.js 下
+  //    那只能代理 /xxx 下的网络请求
+  // 2. 用户首次访问 Service Worker 控制的网站或页面时，Service Worker 会立刻被下载
+  //    之后至少每24小时它会被下载一次
+  // 3. 在下载完成后，开始安装 Service Worker
+  // 4. 在安装完成后，会开始进行激活，浏览器会尝试下载 Service Worker 脚本文件，
+  //    下载成功后，会与前一次已缓存的 Service Worker 脚本文件做对比，如果与前
+  //    一次的 Service Worker 脚本文件不同，证明 Service Worker 已经更新，会
+  //    触发 activate 事件
+  navigator.serviceWorker.register('/ServerWorker.js').then(function(registration) {
+    console.log('Installed', registration.scope);
+  }).catch(function(err) {
+    console.log(err);
+  });
+}
+```
+
+### Service Worker 示例
+
+```js
+// 在 Service Worker 线程中，使用 importScripts 引入 polyfill 脚本
+// 目的是对低版本浏览器的兼容
+// 引入 Cache API 的一个 polyfill
+self.importScripts('./serviceworker-cache-polyfill.js');
+
+// 声明需要缓存的静态资源
+let urlsToCache = [
+  '/',
+  '/index.js',
+  '/style.css',
+  '/favicon.ico',
+];
+
+// 确定当前缓存的 Cache Storage Name(可理解为 DB Name)
+let CACHE_NAME = 'counterxing';
+
+// 监听 install
+self.addEventListener('install', function(event) {
+  // 告知浏览器直接跳过等待阶段，淘汰过期的 ServerWorker.js 的 Service Worke r脚本，
+  //   直接开始尝试激活新的 Service Worker
+  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+    .then(function(cache) {
+      return cache.addAll(urlsToCache);
+    })
+  );
+});
+
+// 监听 fetch，代理网络请求，页面的所有网络请求，都会通过 Service Worker 的 fetch 事件触发
+self.addEventListener('fetch', function(event) {
+  // Service Worker 通过 caches.match 尝试从 Cache 中查找缓存，缓存如果命中，
+  //   则直接返回缓存中的 response，否则，创建一个真实的网络请求。
+  event.respondWith(
+    caches.match(event.request)
+    .then(function(response) {
+      if (response) {
+        return response;
+      }
+      return fetch(event.request);
+    })
+  );
+});
+
+
+self.addEventListener('activate', function(event) {
+  // 白名单，白名单中的 Cache 不被淘汰
+  var cacheWhitelist = ['counterxing'];
+
+  event.waitUntil(
+    // caches.keys() 拿到所有的 Cache Storage，把不在白名单中的 Cache 淘汰
+    caches.keys().then(function(cacheNames) {
+      return Promise.all(
+        cacheNames.map(function(cacheName) {
+          if (cacheWhitelist.indexOf(cacheName) === -1) {
+            // caches.delete() 方法淘汰 Cache
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+});
+
+```
