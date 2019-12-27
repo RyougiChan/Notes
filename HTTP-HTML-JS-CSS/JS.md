@@ -101,7 +101,7 @@
         // eg.
         function doSomething(e)
         {
-            if (!e) var e = window.event;
+            if (!e) let e = window.event;
             e.cancelBubble = true;
             if (e.stopPropagation) e.stopPropagation();
         }
@@ -510,7 +510,7 @@ JS 中 `Object.is()` 方法判断两个值是否是相同的值。内部执行�
 6. 如果 **Type(x)** 为布尔值，则如果 x 和 y 均为 `true` 或均为 `false`，则返回 `true`；否则，返回 `false`。
 7. 如果 x 和 y 指向同一对象，则返回 `true` 。否则，返回 `false`。
 
-### `<,>,<=,>=` 的比较规则
+### `运算符 <,>,<=,>=` 的比较规则
 
 1. 如果操作数是对象，转换为原始值：如果 `valueOf` 方法返回原始值，则使用这个值，否则使用 `toString` 方法的结果，如果转换失败则报错
 2. 经过必要的对象到原始值的转换后，如果两个操作数都是字符串，按照字母顺序进行比较(他们的 16 位 unicode 值的大小)

@@ -98,7 +98,7 @@ name=qiu&age=25
 > 格式
 
 ```yml
-协议版本 URL 短语CRLF
+协议版本 HTTP状态码 短语CRLF
 头部字段名: 值CRLF
 ...
 头部字段名: 值CRLF

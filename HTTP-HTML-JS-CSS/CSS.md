@@ -15,10 +15,10 @@
 - `[attr^=value]` 属性选择器，选择设置了 `attr` 属性值为以 `value` 开头的元素
 - `[attr|=value]` 属性选择器，选择设置了 `attr` 属性值为 `value` 的元素或以 `value` 开头的元素
 - `[attr$=value]` 属性选择器，选择设置了 `attr` 属性值为以 `value` 结尾的元素
-- `[attr~=value]` 属性选择器，选择设置了 `attr` 属性值为以空字符分隔且第一个分隔元素为 `value` 的元素
-- `[attr=value]*` 选择属性值中包含 `value` 的元素
+- `[attr~=value]` 属性选择器，选择设置了 `attr` 属性值为以空字符分隔包含分隔元素为 `value` 的元素
+- `[attr*=value]` 选择属性值中包含 `value` 的元素
 - `X:link` 伪类选择器，鼠标点击之前，也称为原始状态
-- `X:visited` 伪类选择器，鼠标点击之后状态
+- `X:visited` 伪类选择器，鼠标点击之后状态，仅适用 `<a>` 标签
 - `X:hover` 伪类选择器，鼠标悬停状态
 - `X:active` 伪类选择器，鼠标点击之时的状态
 - `X:focus` 伪类选择器，选择获得焦点的元素
@@ -87,7 +87,7 @@ $$element.height = contentheight + paddingheight + borderheight$$
 2. 行内替换元素
   `width`, `height`, `margin`, `padding` 都正常显示，遵循标准的盒模型
 3. 行内非替换元素
-    1. `width`, `height` 不起作用，高度 由 `line-height` 来控制。
+    1. `width`, `height` 不起作用，高度由 `line-height` 来控制。
     2. `padding` 左右起作用，上下不会影响行高，但是对于有背景色和内边距的行内非替换元素，背景可以向元素上下延伸，但是行高没有改变。
     3. `margin` 左右作用起作用，上下不起作用，原因在于：行内非替换元素的外边距不会改变一个元素的行高
 
@@ -185,6 +185,7 @@ div {
 div {
   display: inline-block;
   *display: inline;
+  /* 当内联元素的 hasLayout 为 true 的时候，可以给这个内联元素设定高度和宽度并得到期望的效果 */
   *zoom: 1;
 }
 ```
@@ -392,7 +393,7 @@ Ref: [https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Positioning/Understan
         */
         top: 0;
         bottom: 0;
-        margin: auto; /* equals to margin-top:0; margin-bottom:0 */
+        margin: auto; /* equals to margin-top:auto; margin-bottom:auto */
     }
     ```
 
@@ -450,7 +451,7 @@ Ref: [https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Positioning/Understan
 
     ```html
     <div class="b" id="b6">
-    <div class="inner"></div>
+        <div class="inner"></div>
     </div>
     ```
 
