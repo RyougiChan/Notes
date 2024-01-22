@@ -266,7 +266,7 @@ Content-Type: text/html; charset=UTF-8
     Note right of Server: CLOSE_WAIT
     Note left of Client: FIN_WAIT_2
     Server -->> Client: FIN=1,ACK=X+1,Seq=Y
-    Note left of Client: LAST_ACK
+    Note right of Server: LAST_ACK
     Client ->> Server: ACK=Y+1,Seq=X+1
     Note left of Client: TIME_WAIT
     Note right of Server: 关闭 TCP
